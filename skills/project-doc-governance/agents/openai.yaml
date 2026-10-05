@@ -1,0 +1,4 @@
+interface:
+  display_name: "项目文档治理"
+  short_description: "建立仓库文档分层、唯一事实源、ADR 决策记录、新鲜度漂移检测与任务归档的渐进披露治理体系。"
+  default_prompt: "Use $project-doc-governance 为这个项目判定文档治理模式（初始化/重组/沉淀/只读），建立 docs 分层、AGENTS.md 政策、ADR 与新鲜度检测规则。"
