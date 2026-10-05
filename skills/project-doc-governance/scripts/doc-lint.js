@@ -3,26 +3,37 @@
  * doc-lint.js — 文档治理校验脚本（project-doc-governance 技能配套工具）
  *
  * 母版：project-doc-governance 技能 scripts/doc-lint.js。
- * 仓库副本：初始化/重组时复制到 <repo>/scripts/doc-lint.js 并登记 AGENTS.md；
+ * 仓库副本：初始化/重组时复制到 <repo>/scripts/ 并登记 AGENTS.md：
+ *   - CJS 仓库（根 package.json 无 "type": "module"）：doc-lint.js
+ *   - ESM 仓库（根 package.json 有 "type": "module"）：doc-lint.cjs
  * 副本版本落后于母版时（--version 比对），随重组更新。
  *
- * 用法：node doc-lint.js <仓库根目录> [--budget 150] [--version]
- * --version：输出版本号，用于仓库副本与技能母版版本比对。
+ * 用法：node doc-lint.js <仓库根目录> [选项]
+ *   --budget <n>          AGENTS.md 行数预算，默认 150
+ *   --max-doc-lines <n>   事实源活文档体积基线，默认 400（超限仅 WARN）
+ *   --hot-index-rows <n>  tasks 热索引数据行数阈值，默认 12（超限仅 WARN）
+ *   --ignore <glob>       忽略路径（可重复；* 匹配单段，** 匹配任意深度）
+ *   --version             输出版本号，用于仓库副本与技能母版版本比对
  *
  * 检查项：
- *   ① 孤儿文件：docs/ 各目录内的 md 文件必须被本级 README.md 索引
+ *   ① 可达性：docs/ 内每个 md 必须能沿 README 链接从 docs/README.md 抵达；
+ *      跳数 > 3 记 WARN。目录缺 README 入口单独报告。
  *   ② 死链：docs/ 与根入口文件内的相对 md 链接必须有效
- *   ③ frontmatter：活文档必须有 status / last_verified（living 还需 covers）
- *   ④ covers 漂移：covers 覆盖代码的最后提交晚于文档最后提交 → 疑似陈旧（需 git）
- *   ⑤ AGENTS.md 行数预算：默认 ≤150 行，可用 --budget 覆盖
+ *   ③ frontmatter：活文档必须有 status / last_verified（scope=code 时还需 covers）；
+ *      status 与 last_verified 的值必须合法
+ *   ④ covers 漂移：covers 覆盖代码的最后提交晚于文档最后提交 → 疑似陈旧（需 git）；
+ *      covers 路径不存在 → 报错
+ *   ⑤ AGENTS.md 行数预算
+ *   ⑨ 活文档体积基线：事实源层活文档超过 --max-doc-lines → WARN
+ *   ⑧ tasks 索引一致性：热/冷索引与 docs/tasks/ 实际目录一一对应
  *
  * 退出码：0 = 全绿或 --version 查询成功；1 = 存在问题或目录不存在。
  * 豁免：README.md、日期前缀文件（YYYY-MM-DD-*）、docs/tasks/ 下的过程文件
- *       不参与检查③；ADR-* 文件只要求 status 字段。
+ *       不参与检查③④；ADR-* 文件只要求 status 字段，且不参与④⑨。
  */
 'use strict';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 
 const fs = require('fs');
 const path = require('path');
@@ -36,9 +47,21 @@ if (args.includes('--version')) {
 }
 let repoRoot = process.cwd();
 let budget = 150;
+let maxDocLines = 400;
+let hotIndexRows = 12;
+const ignoreGlobs = [];
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--budget' && args[i + 1]) {
     budget = parseInt(args[i + 1], 10);
+    i++;
+  } else if (args[i] === '--max-doc-lines' && args[i + 1]) {
+    maxDocLines = parseInt(args[i + 1], 10);
+    i++;
+  } else if (args[i] === '--hot-index-rows' && args[i + 1]) {
+    hotIndexRows = parseInt(args[i + 1], 10);
+    i++;
+  } else if (args[i] === '--ignore' && args[i + 1]) {
+    ignoreGlobs.push(args[i + 1]);
     i++;
   } else if (!args[i].startsWith('--')) {
     repoRoot = path.resolve(args[i]);
@@ -49,8 +72,34 @@ if (!fs.existsSync(repoRoot)) {
   process.exit(1);
 }
 
+// ---------- 路径忽略 ----------
+function globToRe(glob) {
+  const norm = glob.split(path.sep).join('/').replace(/^\.\//, '');
+  let re = '';
+  for (let i = 0; i < norm.length; i++) {
+    const c = norm[i];
+    if (c === '*') {
+      if (norm[i + 1] === '*') { re += '.*'; i++; }
+      else re += '[^/]*';
+    } else if ('\\^$+.()|{}[]'.includes(c)) {
+      re += '\\' + c;
+    } else {
+      re += c;
+    }
+  }
+  return new RegExp('^' + re + '$');
+}
+const ignoreRes = ignoreGlobs.map(globToRe);
+function isIgnored(relPath) {
+  if (ignoreRes.length === 0) return false;
+  const p = relPath.split(path.sep).join('/');
+  return ignoreRes.some((re) => re.test(p));
+}
+
 const docsDir = path.join(repoRoot, 'docs');
-const issues = { orphan: [], deadlink: [], frontmatter: [], drift: [], budget: [] };
+const issues = {
+  reach: [], deadlink: [], frontmatter: [], drift: [], budget: [], tasks: [],
+};
 const warnings = [];
 
 // ---------- 工具函数 ----------
@@ -58,6 +107,7 @@ function listMdFiles(dir, acc = []) {
   if (!fs.existsSync(dir)) return acc;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
+    if (isIgnored(rel(full))) continue;
     if (entry.isDirectory()) listMdFiles(full, acc);
     else if (entry.name.toLowerCase().endsWith('.md')) acc.push(full);
   }
@@ -71,6 +121,9 @@ function rel(p) {
 const DATE_PREFIX = /^\d{4}-\d{2}-\d{2}-/;
 const ADR_PREFIX = /^ADR-\d{3}-/;
 
+const STATUS_LIVING = ['living', 'snapshot', 'deprecated'];
+const STATUS_ADR = ['accepted', 'superseded', 'rejected'];
+
 function isExemptFromFrontmatter(file) {
   const name = path.basename(file);
   if (name.toLowerCase() === 'readme.md') return true;
@@ -78,6 +131,27 @@ function isExemptFromFrontmatter(file) {
   const r = rel(file).split('/');
   if (r[0] === 'docs' && r[1] === 'tasks') return true; // 过程材料
   return false;
+}
+
+// 检查④⑨的豁免：按路径 + 按 status。ADR 是决策的日期记录，随代码演进也不更新；
+// snapshot / deprecated 按定义不受新鲜度管理（freshness-policy 的豁免清单）。
+function isExemptFromDrift(file, fm) {
+  if (isExemptFromFrontmatter(file)) return true;
+  if (ADR_PREFIX.test(path.basename(file))) return true;
+  const status = (fm && fm.status || '').trim();
+  if (status === 'snapshot' || status === 'deprecated') return true;
+  return false;
+}
+
+// scope=process 的活文档不描述代码路径，不要求 covers、不参与漂移
+function isProcessScoped(fm) {
+  return (fm && (fm.scope || '').trim()) === 'process';
+}
+
+function todayStr() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 function parseFrontmatter(content) {
@@ -159,6 +233,37 @@ function extractMarkdownBody(content) {
   return text;
 }
 
+// ---------- 链接抽取（①②共用） ----------
+// 容错形态：[x](y)、[x](y "title")、[x](<y z>)、[x](y#anchor)
+const LINK_RE = /\[[^\]]*\]\(\s*(<[^>]*>|[^)\s]+)/g;
+
+function extractLinks(body) {
+  const out = [];
+  let m;
+  LINK_RE.lastIndex = 0;
+  while ((m = LINK_RE.exec(body)) !== null) {
+    let t = m[1].trim();
+    if (t.startsWith('<') && t.endsWith('>')) t = t.slice(1, -1);
+    if (/^(https?:|mailto:|#)/i.test(t)) continue;
+    const noAnchor = t.split('#')[0];
+    if (!noAnchor) continue;
+    try { out.push(decodeURIComponent(noAnchor)); } catch { out.push(noAnchor); }
+  }
+  return out;
+}
+
+// 把链接目标解析为绝对路径；指向目录时返回该目录的 README.md（若有）
+function resolveLink(fromFile, target) {
+  const abs = path.resolve(path.dirname(fromFile), target);
+  try {
+    if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) {
+      const idx = path.join(abs, 'README.md');
+      return fs.existsSync(idx) ? idx : abs;
+    }
+  } catch { /* 忽略 stat 失败 */ }
+  return abs;
+}
+
 function gitLastCommitTs(gitPath) {
   try {
     const out = execSync(`git log -1 --format=%ct -- "${gitPath}"`, {
@@ -183,48 +288,52 @@ function hasGit() {
   }
 }
 
-// ---------- ① 孤儿文件 ----------
-function checkOrphans() {
+// ---------- ① 可达性 ----------
+// 从 docs/README.md 出发做 BFS，沿 README 链接走图。比"同目录 basename 是否被提及"
+// 严格：整棵没人链接的子树、以及跨目录断链，都会被抓出来。
+function checkReachability() {
   if (!fs.existsSync(docsDir)) {
-    warnings.push('docs/ 目录不存在，跳过孤儿文件检查');
+    warnings.push('docs/ 目录不存在，跳过可达性检查');
     return;
   }
-  // 按目录分组
-  const byDir = new Map();
-  for (const f of listMdFiles(docsDir)) {
-    const dir = path.dirname(f);
-    if (!byDir.has(dir)) byDir.set(dir, []);
-    byDir.get(dir).push(f);
+  const allFiles = listMdFiles(docsDir);
+  const fileSet = new Set(allFiles.map((f) => path.resolve(f)));
+
+  // 目录缺 README 入口：docs/ 下任何直接含 md 的目录都必须有 README.md
+  const dirs = new Set(allFiles.map((f) => path.dirname(f)));
+  for (const dir of dirs) {
+    if (!fs.existsSync(path.join(dir, 'README.md'))) {
+      issues.reach.push(`${rel(dir)}/ 缺少 README.md 入口`);
+    }
   }
-  const linkRe = /\[[^\]]*\]\(([^)\s]+)\)/g;
-  for (const [dir, files] of byDir) {
-    const readme = files.find((f) => path.basename(f).toLowerCase() === 'readme.md');
-    // 从 README 纯正文提取链接目标 basename 集合，精确相等比较
-    const indexed = new Set();
-    if (readme) {
-      const body = extractMarkdownBody(fs.readFileSync(readme, 'utf8'));
-      let m;
-      linkRe.lastIndex = 0;
-      while ((m = linkRe.exec(body)) !== null) {
-        let target = m[1];
-        if (/^(https?:|mailto:|#)/.test(target)) continue;
-        target = target.split('#')[0];
-        if (!target) continue;
-        try { target = decodeURIComponent(target); } catch { /* 保持原样 */ }
-        indexed.add(path.basename(target).toLowerCase());
-      }
+
+  const entry = path.join(docsDir, 'README.md');
+  if (!fs.existsSync(entry)) {
+    issues.reach.push('docs/README.md 不存在，无法做可达性检查');
+    return;
+  }
+
+  const start = path.resolve(entry);
+  const hops = new Map([[start, 0]]);
+  const queue = [start];
+  while (queue.length) {
+    const cur = queue.shift();
+    let body;
+    try { body = extractMarkdownBody(fs.readFileSync(cur, 'utf8')); } catch { continue; }
+    for (const target of extractLinks(body)) {
+      const abs = resolveLink(cur, target);
+      if (!fileSet.has(abs) || hops.has(abs)) continue; // docs/ 之外的目标交给②
+      hops.set(abs, hops.get(cur) + 1);
+      queue.push(abs);
     }
-    if (!readme) {
-      // 无 README 时根因是缺少入口，不需要逐文件报"未被索引"
-      issues.orphan.push(`${rel(dir)}/ 缺少 README.md 入口`);
-      continue;
-    }
-    for (const f of files) {
-      const name = path.basename(f);
-      if (name.toLowerCase() === 'readme.md') continue;
-      if (!indexed.has(name.toLowerCase())) {
-        issues.orphan.push(`${rel(f)} 未被 ${rel(path.join(dir, 'README.md'))} 索引`);
-      }
+  }
+
+  for (const f of allFiles) {
+    const abs = path.resolve(f);
+    if (!hops.has(abs)) {
+      issues.reach.push(`${rel(f)} 不可达：无法沿 README 链接从 docs/README.md 抵达`);
+    } else if (hops.get(abs) > 3) {
+      warnings.push(`${rel(f)} 跳数 ${hops.get(abs)}，超过 3：索引层级过深`);
     }
   }
 }
@@ -243,18 +352,12 @@ function checkLinks() {
       listMdFiles(r).forEach((f) => files.add(f));
     }
   }
-  const linkRe = /\[[^\]]*\]\(([^)\s]+)\)/g;
   for (const f of files) {
     const content = extractMarkdownBody(fs.readFileSync(f, 'utf8'));
-    let m;
-    while ((m = linkRe.exec(content)) !== null) {
-      let target = m[1];
-      if (/^(https?:|mailto:|#)/.test(target)) continue;
-      target = target.split('#')[0];
-      if (!target) continue;
-      const resolved = path.resolve(path.dirname(f), decodeURIComponent(target));
+    for (const target of extractLinks(content)) {
+      const resolved = path.resolve(path.dirname(f), target);
       if (!fs.existsSync(resolved)) {
-        issues.deadlink.push(`${rel(f)} -> ${m[1]} 目标不存在`);
+        issues.deadlink.push(`${rel(f)} -> ${target} 目标不存在`);
       }
     }
   }
@@ -262,47 +365,183 @@ function checkLinks() {
 
 // ---------- ③ frontmatter ----------
 function checkFrontmatter(allDocs) {
+  const today = todayStr();
   for (const f of allDocs) {
     if (isExemptFromFrontmatter(f)) continue;
     const content = fs.readFileSync(f, 'utf8');
     const fm = parseFrontmatter(content);
     const name = path.basename(f);
+    const isAdr = ADR_PREFIX.test(name);
     if (!fm) {
       issues.frontmatter.push(`${rel(f)} 缺少 frontmatter`);
       continue;
     }
-    if (ADR_PREFIX.test(name)) {
-      if (!fm.status) issues.frontmatter.push(`${rel(f)} ADR 缺少 status 字段`);
-      continue;
+    const status = (fm.status || '').trim();
+
+    if (!status) {
+      issues.frontmatter.push(`${rel(f)} 缺少 status`);
+    } else if (isAdr) {
+      if (!STATUS_ADR.includes(status)) {
+        issues.frontmatter.push(
+          `${rel(f)} status="${status}" 非法，ADR 只允许 ${STATUS_ADR.join(' / ')}`);
+      }
+    } else if (!STATUS_LIVING.includes(status)) {
+      issues.frontmatter.push(
+        `${rel(f)} status="${status}" 非法，只允许 ${STATUS_LIVING.join(' / ')}`);
     }
-    if (!fm.status) issues.frontmatter.push(`${rel(f)} 缺少 status`);
-    if (!fm.last_verified) issues.frontmatter.push(`${rel(f)} 缺少 last_verified`);
-    if (fm.status === 'living' && parseCovers(fm.covers).length === 0) {
-      issues.frontmatter.push(`${rel(f)} status=living 但缺少 covers`);
+
+    if (isAdr) continue; // ADR 只要求 status
+
+    const lv = (fm.last_verified || '').trim();
+    if (!lv) {
+      issues.frontmatter.push(`${rel(f)} 缺少 last_verified`);
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(lv)) {
+      issues.frontmatter.push(`${rel(f)} last_verified="${lv}" 格式应为 YYYY-MM-DD`);
+    } else if (lv > today) {
+      issues.frontmatter.push(`${rel(f)} last_verified="${lv}" 晚于今天 ${today}`);
+    }
+
+    const scope = (fm.scope || '').trim();
+    if (scope && scope !== 'code' && scope !== 'process') {
+      issues.frontmatter.push(`${rel(f)} scope="${scope}" 非法，只允许 code / process`);
+    }
+    if (status === 'living' && !isProcessScoped(fm) && parseCovers(fm.covers).length === 0) {
+      issues.frontmatter.push(
+        `${rel(f)} status=living 但缺少 covers（无对应代码路径的文档请标注 scope: process）`);
     }
   }
 }
 
 // ---------- ④ covers 漂移 ----------
+// covers 路径存在性不依赖 git，无论有无 git 都检查；时间戳比对需要 git。
 function checkDrift(allDocs) {
-  if (!hasGit()) {
-    warnings.push('当前目录不是 git 仓库，跳过 covers 漂移检测');
-    return;
-  }
+  const withGit = hasGit();
+  if (!withGit) warnings.push('当前目录不是 git 仓库，跳过 covers 漂移的时间戳比对');
   for (const f of allDocs) {
-    if (isExemptFromFrontmatter(f)) continue;
     const fm = parseFrontmatter(fs.readFileSync(f, 'utf8'));
     if (!fm) continue;
+    if (isExemptFromDrift(f, fm)) continue;
+    if (isProcessScoped(fm)) continue;
     const covers = parseCovers(fm.covers);
     if (covers.length === 0) continue;
+    const missing = covers.filter((c) => !fs.existsSync(path.resolve(repoRoot, c)));
+    for (const c of missing) {
+      issues.drift.push(`${rel(f)} covers 路径不存在：${c}`);
+    }
+    if (!withGit) continue;
     const docTs = gitLastCommitTs(rel(f));
     if (docTs === null || docTs === 0) continue;
     for (const c of covers) {
+      if (missing.includes(c)) continue;
       const coverTs = gitLastCommitTs(c);
       if (coverTs === null) continue;
       if (coverTs > docTs) {
         issues.drift.push(`${rel(f)} 疑似陈旧：covers 的 ${c} 在文档最后提交之后有变更`);
       }
+    }
+  }
+}
+
+// ---------- ⑨ 活文档体积基线 ----------
+const FACT_LAYERS = ['architecture', 'engineering', 'product', 'operations', 'governance'];
+
+function checkVolume(allDocs) {
+  for (const f of allDocs) {
+    const fm = parseFrontmatter(fs.readFileSync(f, 'utf8'));
+    if (!fm) continue;
+    if (isExemptFromDrift(f, fm)) continue;           // 含 snapshot / deprecated / ADR
+    if ((fm.status || '').trim() !== 'living') continue;
+    const r = rel(f).split('/');
+    if (r[0] !== 'docs' || !FACT_LAYERS.includes(r[1])) continue;
+    const lines = fs.readFileSync(f, 'utf8').split(/\r?\n/).length;
+    if (lines > maxDocLines) {
+      warnings.push(`⑨ ${rel(f)} 共 ${lines} 行（基线 ${maxDocLines}）：事实源应有界，考虑删减`);
+    }
+  }
+}
+
+// ---------- ⑧ tasks 索引一致性 ----------
+// 规则（task-doc-governance）：每个任务目录必须在热或冷索引中登记；收口后可从热索引
+// 移除该行，也可"改为指向 archive 的一行摘要"——后者是合法的，所以判据不是"是否出现
+// 在热索引"，而是"是否被当作本地目录引用"。归档登记允许用标题或内联代码，不限于链接。
+function checkTasksIndex() {
+  const tasksDir = path.join(docsDir, 'tasks');
+  if (!fs.existsSync(tasksDir)) return;
+  const hotIndex = path.join(tasksDir, 'README.md');
+  const coldDir = path.join(tasksDir, 'archive');
+  const coldIndex = path.join(coldDir, 'README.md');
+
+  const readDirNames = (dir) => {
+    if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && DATE_PREFIX.test(e.name))
+      .map((e) => e.name);
+  };
+  const hotDirs = readDirNames(tasksDir);
+  const coldDirs = readDirNames(coldDir);
+
+  const TOKEN_RE = /\d{4}-\d{2}-\d{2}-[A-Za-z0-9-]+/g;
+  const norm = (t) => t.replace(/\.md$/, '');
+
+  // 登记证据：正文任意位置出现的日期前缀词（标题、表格、内联代码都算）
+  const registered = (indexFile) => {
+    if (!fs.existsSync(indexFile)) return new Set();
+    const raw = fs.readFileSync(indexFile, 'utf8');
+    const out = new Set();
+    let m;
+    TOKEN_RE.lastIndex = 0;
+    while ((m = TOKEN_RE.exec(raw)) !== null) out.add(norm(m[0]));
+    return out;
+  };
+  // "被当作本地目录引用"：链接目标指向 docs/tasks/ 之下、且不经过 archive/
+  const localRefs = (indexFile) => {
+    if (!fs.existsSync(indexFile)) return new Set();
+    const body = extractMarkdownBody(fs.readFileSync(indexFile, 'utf8'));
+    const out = new Set();
+    for (const target of extractLinks(body)) {
+      const segs = target.split('/');
+      if (segs.includes('archive')) continue;   // 指向归档的一行摘要，规则明确允许
+      for (const seg of segs) {
+        if (DATE_PREFIX.test(seg)) out.add(norm(seg));
+      }
+    }
+    return out;
+  };
+
+  const hotReg = registered(hotIndex);
+  const coldReg = registered(coldIndex);
+  const hotLocal = localRefs(hotIndex);
+
+  for (const d of hotDirs) {
+    if (!hotReg.has(d)) {
+      issues.tasks.push(`${d} 在 docs/tasks/ 下但未登记进热索引 ${rel(hotIndex)}`);
+    }
+  }
+  for (const d of coldDirs) {
+    if (!coldReg.has(d)) {
+      issues.tasks.push(`${d} 已归档但未登记进冷索引 ${rel(coldIndex)}`);
+    }
+  }
+  for (const d of hotLocal) {
+    if (!hotDirs.includes(d)) {
+      issues.tasks.push(
+        `${d} 被热索引当作本地任务引用，但 docs/tasks/ 下无此目录（已归档的应写成 archive/ 前缀）`);
+    }
+  }
+  const both = hotDirs.filter((d) => coldDirs.includes(d));
+  for (const d of both) {
+    issues.tasks.push(`${d} 同时存在于 docs/tasks/ 与 docs/tasks/archive/`);
+  }
+
+  // 热索引"大小恒定"是软约束：行数超阈值提示精简
+  if (fs.existsSync(hotIndex)) {
+    const lines = fs.readFileSync(hotIndex, 'utf8').split(/\r?\n/);
+    const pipeRows = lines.filter((l) => /^\s*\|/.test(l)).length;
+    const seps = lines.filter((l) => /^\s*\|[\s:|-]+\|\s*$/.test(l)).length;
+    const dataRows = Math.max(0, pipeRows - 2 * seps); // 每个表各减去表头与分隔行
+    if (dataRows > hotIndexRows) {
+      warnings.push(
+        `⑧ 热索引 ${rel(hotIndex)} 有 ${dataRows} 行数据（阈值 ${hotIndexRows}）：应只列进行中 + 最近已完成`);
     }
   }
 }
@@ -322,19 +561,22 @@ function checkAgentsBudget() {
 
 // ---------- 执行 ----------
 const allDocs = fs.existsSync(docsDir) ? listMdFiles(docsDir) : [];
-checkOrphans();
+checkReachability();
 checkLinks();
 checkFrontmatter(allDocs);
 checkDrift(allDocs);
 checkAgentsBudget();
+checkTasksIndex();
+checkVolume(allDocs);
 
 // ---------- 输出 ----------
 const labels = {
-  orphan: '① 孤儿文件',
+  reach: '① 可达性',
   deadlink: '② 死链',
-  frontmatter: '③ frontmatter 缺失',
-  drift: '④ covers 漂移（疑似陈旧）',
+  frontmatter: '③ frontmatter 与字段值',
+  drift: '④ covers 漂移与路径',
   budget: '⑤ AGENTS.md 行数',
+  tasks: '⑧ tasks 索引一致性',
 };
 let total = 0;
 for (const key of Object.keys(labels)) {
