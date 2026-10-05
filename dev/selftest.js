@@ -2,12 +2,19 @@
 /**
  * selftest.js — doc-lint 的回归测试
  *
- * 用法：node selftest.js
+ * 用法：node dev/selftest.js
+ *
+ * 开发期工具，**不进分发**：技能分发给各 agent 的是
+ * `skills/project-doc-governance/` 子树，本文件与 fixtures/ 在仓库根的 dev/ 下。
  *
  * 覆盖三组：
  *   1. fixtures/repo-broken —— 每类失败各一例，逐个断言被报出
  *   2. fixtures/repo-clean  —— 全绿，退出码 0
  *   3. 临时 git 仓库        —— ④ 的豁免修复：snapshot / ADR 不报漂移，living 报
+ *
+ * 夹具的边界：夹具是"已知该怎么报"的断言，能防回归；但它由写检查项的人编写，
+ * 因此继承同一套盲点。真实仓库（如大型 monorepo）才能暴露设计层面的误报——
+ * 两者都要跑。
  *
  * 退出码：0 = 全部通过；1 = 有失败。
  */
@@ -18,9 +25,9 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const SKILL_ROOT = path.resolve(__dirname, '..');
-const LINT = path.join(__dirname, 'doc-lint.js');
-const FIXTURES = path.join(SKILL_ROOT, 'fixtures');
+const SKILL_ROOT = path.resolve(__dirname, '../skills/project-doc-governance');
+const LINT = path.join(SKILL_ROOT, 'scripts', 'doc-lint.js');
+const FIXTURES = path.join(__dirname, 'fixtures');
 
 let passed = 0;
 let failed = 0;

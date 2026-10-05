@@ -143,4 +143,4 @@ description: Use when a repository has messy or boundary-unclear docs/, an overs
 - `doc-lint.js` 内的 `VERSION` 常量保留，用于仓库副本与母版比对。
 - 改了 `description` 字段（触发入口，等同于 API）时，同步更新 `agents/openai.yaml`。
 - 改了 `scripts/final-state-rules.json` 后，重新生成项目 hook 侧的副本（doc-lint 会校验 `rules_version`）。
-- 改脚本或检查项后跑 `node scripts/selftest.js` 回归。
+- 改脚本或检查项后，在技能仓库根跑 `node dev/selftest.js` 回归（夹具在 `dev/fixtures/`，不随技能分发）。夹具继承编写者的盲点，**同时要拿真实仓库抽查**。

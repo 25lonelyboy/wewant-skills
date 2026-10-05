@@ -12,19 +12,23 @@
 
 ```text
 skills/                              仓库根
-  skills/
+  skills/                            ← 分发给各 agent 的部分
     project-doc-governance/          技能：项目文档治理
       SKILL.md
       references/                    按需加载的规则文件
-      scripts/                       doc-lint.js、final-state-rules.json、selftest.js
-      templates/                     可粘贴的仓库侧产物（pre-commit、CI、hook 规则块等）
-      fixtures/                      回归夹具（repo-broken / repo-clean）
+      scripts/                       doc-lint.js、final-state-rules.json
+      templates/                     可粘贴的仓库侧产物（pre-commit、CI、规则块等）
       agents/                        其他 harness 的入口清单
+  dev/                               ← 只给维护技能的人用，不分发
+    selftest.js                      回归测试
+    fixtures/                        回归夹具（repo-broken / repo-clean）
   README.md
   CHANGELOG.md
 ```
 
-每个技能一个子目录，内含 `SKILL.md` 与它自己的 `references/`、`scripts/`、`templates/`、`fixtures/`。新增技能时并列添加子目录即可，不需要改动已有技能。
+**分发边界**：cc-switch 安装的是 `skills/<技能名>/` 子树——只有它下面的文件会到达各 agent。仓库根与 `dev/` 不参与分发。
+
+分两个技能目录时并列添加 `skills/<技能名>/` 即可，不需要改动已有技能。
 
 ## 技能清单
 
@@ -41,8 +45,8 @@ skills/                              仓库根
 ```bash
 # 1. 改内容
 # 2. 本地验证（不需要安装到 agent）
-node skills/project-doc-governance/scripts/selftest.js
-node skills/project-doc-governance/scripts/doc-lint.js <某个仓库根>
+node dev/selftest.js                                   # 夹具回归
+node skills/project-doc-governance/scripts/doc-lint.js <某个仓库根>   # 真实仓库抽查
 
 # 3. 发布
 git commit && git push
@@ -52,6 +56,8 @@ git commit && git push
 改技能的 `SKILL.md` 措辞后，只有经过第 4 步才能在 agent 里看到效果；改 `doc-lint.js` 本身则不必——它是独立脚本，可以直接在仓库里跑。
 
 改了 `scripts/final-state-rules.json` 后，项目侧的 hook 副本需要重新生成（doc-lint ⑥ 会校验 `rules_version`）。
+
+**夹具要跑，真实仓库也要抽查。** 夹具是"已知该怎么报"的断言，能防回归，但它由写检查项的人编写，继承同一套盲点；设计层面的误报（例如 monorepo 子包相对路径）只有真实仓库才暴露得出来。
 
 ## 归档
 

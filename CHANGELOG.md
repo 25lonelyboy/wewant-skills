@@ -1,6 +1,16 @@
 # Changelog
 
-`project-doc-governance` 技能的版本记录。技能包版本与 `doc-lint.js` 内的 `VERSION` 常量同步；仓库侧用 git tag 标记。
+`project-doc-governance` 技能的版本记录。
+
+两个版本号**分开跟踪**，可以不同步：
+
+- **技能包版本**（本文件的条目 + git tag）：技能整体的迭代
+- **`doc-lint.js` 的 `VERSION` 常量**：只跟踪脚本本身。它服务于"仓库里的副本是否落后于母版"的比对，所以脚本没变时不应跟着升——否则会给出假的落后信号
+
+## 1.3.1
+
+- 回归夹具与 `selftest.js` 移到仓库根的 `dev/`：它们只服务"维护技能的人"，不应随技能分发到各 agent（`doc-lint.js` 未变，脚本版本仍为 1.3.0）
+- 技能分发范围明确为 `skills/<技能名>/` 子树，`README.md` 写明分发边界
 
 ## 1.3.0
 
