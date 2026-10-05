@@ -24,16 +24,20 @@
  *   ④ covers 漂移：covers 覆盖代码的最后提交晚于文档最后提交 → 疑似陈旧（需 git）；
  *      covers 路径不存在 → 报错
  *   ⑤ AGENTS.md 行数预算
- *   ⑨ 活文档体积基线：事实源层活文档超过 --max-doc-lines → WARN
+ *   ⑥ 终态痕迹：事实源层不得出现修订史/自我更正/删除线/免责散文/待办占位
+ *      （词表见 final-state-rules.json；行内代码内的词不算，供规则文本列举禁用词）
+ *   ⑦ 悬空引用：反引号里的仓库路径必须真实存在；外部链接须标访问日期（后者仅 WARN）
  *   ⑧ tasks 索引一致性：热/冷索引与 docs/tasks/ 实际目录一一对应
+ *   ⑨ 活文档体积基线：事实源层活文档超过 --max-doc-lines → WARN
  *
  * 退出码：0 = 全绿或 --version 查询成功；1 = 存在问题或目录不存在。
  * 豁免：README.md、日期前缀文件（YYYY-MM-DD-*）、docs/tasks/ 下的过程文件
- *       不参与检查③④；ADR-* 文件只要求 status 字段，且不参与④⑨。
+ *       不参与检查③④；ADR-* 文件只要求 status 字段，且不参与④⑨；
+ *       检查⑥⑦仅作用于事实源层与根入口文件（tasks/ 与 decisions/ 豁免）。
  */
 'use strict';
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 
 const fs = require('fs');
 const path = require('path');
@@ -98,7 +102,8 @@ function isIgnored(relPath) {
 
 const docsDir = path.join(repoRoot, 'docs');
 const issues = {
-  reach: [], deadlink: [], frontmatter: [], drift: [], budget: [], tasks: [],
+  reach: [], deadlink: [], frontmatter: [], drift: [], budget: [],
+  finalstate: [], dangling: [], tasks: [],
 };
 const warnings = [];
 
@@ -183,19 +188,18 @@ function parseCovers(value) {
   return [value];
 }
 
-// ---------- Markdown 预处理（检查①②共用，产出纯正文） ----------
+// ---------- Markdown 预处理 ----------
 function blankNonNewline(s) {
   return s.replace(/[^\r\n]/g, ' ');
 }
 
-function extractMarkdownBody(content) {
+// 剥离 frontmatter 与围栏代码块（围栏行与内容整体置空，保留行结构）。
+// 顺序依赖：必须先剥离围栏，否则代码块内未闭合的 <!-- 或反引号会干扰后续正则。
+function stripFencesAndFrontmatter(content) {
   let text = content;
-  // 顺序依赖：先剥离围栏（否则代码块内未闭合 <!-- 或反引号会干扰后续正则）；
-  // 1) frontmatter 首块置空（保留行结构）
   const fm = text.match(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/);
   if (fm) text = blankNonNewline(fm[0]) + text.slice(fm[0].length);
 
-  // 2) 围栏代码块状态机：``` / ~~~，围栏行与内容整体置空
   const lines = text.split(/\r?\n/); // 兼容 CRLF：保留 \r 会使围栏正则的行尾 $ 不匹配
   const out = [];
   let fence = null; // { char, len }
@@ -216,7 +220,12 @@ function extractMarkdownBody(content) {
     }
     out.push(line);
   }
-  text = out.join('\n');
+  return out.join('\n');
+}
+
+// 产出纯正文：注释与行内代码一并置空（检查①②⑥用）
+function extractMarkdownBody(content) {
+  let text = stripFencesAndFrontmatter(content);
 
   // 3) HTML 注释置空（可跨行）
   text = text.replace(/<!--[\s\S]*?-->/g, blankNonNewline);
@@ -225,12 +234,23 @@ function extractMarkdownBody(content) {
   text = text.replace(/``[\s\S]*?``/g, blankNonNewline);
   text = text.replace(/`[^`\r\n]*`/g, blankNonNewline);
 
-  // 已知限制（有意取舍，见设计文档"不做的事"）：
+  // 已知限制（有意取舍）：
   // - 4 空格缩进代码块不置空：会误伤嵌套列表中的链接索引。
   // - 双反引号跨行 span 可能配对错误：后果为漏报而非误报。
   // - 行内代码 span 内的 `<!--` 可能被 HTML 注释正则在先匹配：同类风险，后果为漏报。
+  // 行内代码被清空，使得"规则里用反引号列举禁用词"不会被⑥误报——这是刻意的。
 
   return text;
+}
+
+// 取出行内代码 span 的内容（检查⑦用：反引号里的仓库路径需要被读到，而不是被清空）
+function extractInlineCodeSpans(content) {
+  const body = stripFencesAndFrontmatter(content);
+  const spans = [];
+  const re = /``([^`]+?)``|`([^`\r\n]+)`/g;
+  let m;
+  while ((m = re.exec(body)) !== null) spans.push((m[1] || m[2]).trim());
+  return spans;
 }
 
 // ---------- 链接抽取（①②共用） ----------
@@ -443,8 +463,6 @@ function checkDrift(allDocs) {
 }
 
 // ---------- ⑨ 活文档体积基线 ----------
-const FACT_LAYERS = ['architecture', 'engineering', 'product', 'operations', 'governance'];
-
 function checkVolume(allDocs) {
   for (const f of allDocs) {
     const fm = parseFrontmatter(fs.readFileSync(f, 'utf8'));
@@ -452,7 +470,7 @@ function checkVolume(allDocs) {
     if (isExemptFromDrift(f, fm)) continue;           // 含 snapshot / deprecated / ADR
     if ((fm.status || '').trim() !== 'living') continue;
     const r = rel(f).split('/');
-    if (r[0] !== 'docs' || !FACT_LAYERS.includes(r[1])) continue;
+    if (r[0] !== 'docs' || !FACT_LAYERS_SET.includes(r[1])) continue;
     const lines = fs.readFileSync(f, 'utf8').split(/\r?\n/).length;
     if (lines > maxDocLines) {
       warnings.push(`⑨ ${rel(f)} 共 ${lines} 行（基线 ${maxDocLines}）：事实源应有界，考虑删减`);
@@ -460,6 +478,112 @@ function checkVolume(allDocs) {
   }
 }
 
+// ---------- ⑥ 终态痕迹 / ⑦ 悬空引用（仅作用于事实源层） ----------
+const FACT_LAYERS_SET = ['architecture', 'engineering', 'product', 'operations', 'governance'];
+
+// 事实源层文档 + 根入口文件；豁免 docs/tasks/ 与 docs/decisions/
+function factSourceTargets(allDocs) {
+  const targets = allDocs.filter((f) => {
+    const r = rel(f).split('/');
+    return r[0] === 'docs' && FACT_LAYERS_SET.includes(r[1]);
+  });
+  for (const name of ['AGENTS.md', 'README.md']) {
+    const f = path.join(repoRoot, name);
+    if (fs.existsSync(f)) targets.push(f);
+  }
+  return targets;
+}
+
+function loadFinalStateRules() {
+  const p = path.join(__dirname, 'final-state-rules.json');
+  if (!fs.existsSync(p)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (e) {
+    warnings.push(`⑥ final-state-rules.json 解析失败：${e.message}`);
+    return null;
+  }
+}
+
+// 用 extractMarkdownBody 扫（行内代码已清空）——规则文本里用反引号列举禁用词不会被误报
+function checkFinalState(allDocs, ruleSet) {
+  if (!ruleSet) {
+    warnings.push('⑥ 未找到 final-state-rules.json，跳过终态痕迹检查');
+    return;
+  }
+  const compiled = [];
+  for (const r of ruleSet.rules || []) {
+    try {
+      const flags = (r.flags || '').includes('g') ? r.flags : `${r.flags || ''}g`;
+      compiled.push({ label: r.label, re: new RegExp(r.pattern, flags) });
+    } catch (e) {
+      warnings.push(`⑥ 规则无法编译（${r.label}）：${e.message}`);
+    }
+  }
+  for (const f of factSourceTargets(allDocs)) {
+    const body = extractMarkdownBody(fs.readFileSync(f, 'utf8'));
+    for (const { label, re } of compiled) {
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(body)) !== null) {
+        const hit = m[0].replace(/\s+/g, ' ').slice(0, 40);
+        issues.finalstate.push(`${rel(f)} 终态痕迹[${label}]：${hit}`);
+        if (m.index === re.lastIndex) re.lastIndex++; // 防零宽匹配死循环
+      }
+    }
+  }
+}
+
+const PATH_LIKE = /^[\w][\w.-]*(?:\/[\w.-]+)*\/?$/;
+const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|vue|py|go|java|kt|cs|rb|rs|php|json|ya?ml|toml|ini|md|sh|ps1|bat|sql|prisma|proto|tf|env|lock)$/i;
+const URL_RE = /https?:\/\/[^\s)\]>`"']+/g;
+const ACCESS_RE = /(访问于|访问日期|accessed)[^\n]{0,24}\d{4}-\d{2}-\d{2}/i;
+const LOCAL_HOST_RE = /\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)/i;
+
+// 只检查以仓库顶层目录开头的路径。
+// 原因：monorepo 里文档常按应用相对路径书写（`src/generated/`、`prisma/seed.ts`），
+// 拿仓库根去解析会全线误报。限定"顶层目录开头"后判据明确：要么它真在仓库里，要么它
+// 压根不是仓库根相对路径（属于对某个子包的描述，交给人工）。这牺牲了一部分检出率，
+// 换来可预测——一个满屏误报的检查项，agent 会直接绕过。
+function topLevelDirs() {
+  try {
+    return fs.readdirSync(repoRoot, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+      .map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
+function checkDanglingRefs(allDocs) {
+  const tops = topLevelDirs();
+  for (const f of factSourceTargets(allDocs)) {
+    const content = fs.readFileSync(f, 'utf8');
+    for (const span of extractInlineCodeSpans(content)) {
+      if (span.length > 200 || span.includes(' ') || span.startsWith('--')) continue;
+      if (!PATH_LIKE.test(span) || !span.includes('/')) continue;
+      const head = span.split('/')[0];
+      if (!tops.includes(head)) continue;                     // 非仓库根相对路径，跳过
+      if (!CODE_EXT.test(span) && !span.endsWith('/')) continue;
+      if (!fs.existsSync(path.resolve(repoRoot, span))) {
+        issues.dangling.push(`${rel(f)} 引用了不存在的路径：${span}`);
+      }
+    }
+    const lines = stripFencesAndFrontmatter(content).split(/\r?\n/);
+    for (const line of lines) {
+      const urls = line.match(URL_RE);
+      if (!urls) continue;
+      if (ACCESS_RE.test(line)) continue;
+      const external = urls.filter((u) => !LOCAL_HOST_RE.test(u));
+      if (external.length === 0) continue;                    // 本地地址不是外部事实来源
+      warnings.push(`⑦ ${rel(f)} 外部链接未标访问日期：${external[0].slice(0, 60)}`);
+    }
+  }
+}
+
+// 规则（task-doc-governance）：每个任务目录必须在热或冷索引中登记；收口后可从热索引
+// 移除该行，也可"改为指向 archive 的一行摘要"——后者是合法的，所以判据不是"是否出现
+// 在热索引"，而是"是否被当作本地目录引用"。归档登记允许用标题或内联代码，不限于链接。
 // ---------- ⑧ tasks 索引一致性 ----------
 // 规则（task-doc-governance）：每个任务目录必须在热或冷索引中登记；收口后可从热索引
 // 移除该行，也可"改为指向 archive 的一行摘要"——后者是合法的，所以判据不是"是否出现
@@ -566,6 +690,8 @@ checkLinks();
 checkFrontmatter(allDocs);
 checkDrift(allDocs);
 checkAgentsBudget();
+checkFinalState(allDocs, loadFinalStateRules());
+checkDanglingRefs(allDocs);
 checkTasksIndex();
 checkVolume(allDocs);
 
@@ -576,6 +702,8 @@ const labels = {
   frontmatter: '③ frontmatter 与字段值',
   drift: '④ covers 漂移与路径',
   budget: '⑤ AGENTS.md 行数',
+  finalstate: '⑥ 终态痕迹',
+  dangling: '⑦ 悬空引用',
   tasks: '⑧ tasks 索引一致性',
 };
 let total = 0;

@@ -1,0 +1,43 @@
+# GitHub Actions：文档治理自检
+#
+# 放进 .github/workflows/，与主 CI 并列为一个独立 job。
+# 默认报警式（不阻断其他 job）——单人直推的工作流里，文档门禁阻断提交的收益低于
+# 它打断交付的成本。团队协作或分支保护场景可去掉 continue-on-error。
+
+name: doc-lint
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'docs/**'
+      - 'AGENTS.md'
+      - 'README.md'
+      - 'scripts/doc-lint.*'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'AGENTS.md'
+      - 'README.md'
+  workflow_dispatch:
+
+jobs:
+  doc-lint:
+    runs-on: ubuntu-latest
+    continue-on-error: true   # 报警式；改为阻断时删掉本行
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0      # covers 漂移检测需要完整 git 历史
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: doc-lint
+        run: |
+          if [ -f scripts/doc-lint.cjs ]; then
+            node scripts/doc-lint.cjs .
+          else
+            node scripts/doc-lint.js .
+          fi

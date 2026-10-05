@@ -1,0 +1,24 @@
+#!/bin/sh
+# 备选方案：复制式同步（junction 不可用、或 junction 会被上游更新打断时使用）。
+#
+# 与 link-agent-folder 是两种不同机制，不要混用：
+#   - junction：建一次，之后内容自动跟随；但可能被"先删目录再重建"的更新流程打断
+#   - 本脚本：每次技能更新后跑一次；稳定，但没有透明性
+#
+# 用法：在技能的发布流程里挂上（改仓库 → push → agent 更新 → 跑本脚本）。
+
+set -e
+
+SRC="D:/WorkSpace/AI/skills/skills/project-doc-governance"
+DST="$USERPROFILE/.qoder-cn/skills/project-doc-governance"
+
+if [ ! -d "$SRC" ]; then
+  echo "错误：源不存在 $SRC"
+  exit 1
+fi
+
+echo "同步 $SRC → $DST"
+rm -rf "$DST"
+mkdir -p "$(dirname "$DST")"
+cp -r "$SRC" "$DST"
+echo "完成。"

@@ -1,0 +1,33 @@
+#!/bin/sh
+# 提交前跑 doc-lint（阻断式）。
+#
+# 两种接入方式，任选其一：
+#
+# A. husky（仓库已用 husky 时）
+#    放到 .husky/pre-commit，并确保 package.json 里有：
+#      "scripts": { "doc:lint": "node scripts/doc-lint.js ." }
+#    文件内容：
+#      #!/bin/sh
+#      pnpm doc:lint
+#
+# B. 原生 hook（不想引入 husky 时）
+#    把本文件放到 .githooks/pre-commit 并 chmod +x，然后执行一次：
+#      git config core.hooksPath .githooks
+#
+# 注意：
+# - 副本为 .cjs 时（根 package.json 有 "type": "module"）替换文件名。
+# - 仅当被治理仓库自身是文档仓库时才阻断提交；如果仓库文档更新频率低、
+#   阻断会打断正常开发，可改为报警式（不 exit 非零）或只放进 CI。
+
+set -e
+
+if [ ! -f scripts/doc-lint.js ] && [ ! -f scripts/doc-lint.cjs ]; then
+  echo "doc-lint: 未找到 scripts/doc-lint.{js,cjs}，跳过"
+  exit 0
+fi
+
+if [ -f scripts/doc-lint.cjs ]; then
+  node scripts/doc-lint.cjs .
+else
+  node scripts/doc-lint.js .
+fi

@@ -1,0 +1,41 @@
+#!/bin/sh
+# 把技能接入"只读目录、没有安装机制"的 agent（一次性操作）。
+#
+# 背景：有些 agent 没有插件/市场机制，只能读自己的技能目录（例如 Qoder CN 读
+# ~/.qoder-cn/skills/）。这类 agent 也永远不会被第三方工具（如 cc-switch）自动
+# 建链接，所以这一步要手动做一次。
+#
+# 做法用**目录 junction**（`mklink /J`）而不是符号链接：
+#   - 不需要管理员，也不需要开发者模式
+#   - junction 由文件系统层解析，几乎所有程序都跟随，对不认识链接的程序更稳
+#
+# 用法：改下面两个变量后执行一次。之后技能内容更新会自动跟随，不需要重复执行。
+#
+# ⚠️ 破坏性：目标位置若已存在同名**实目录**，必须先备份再删，否则本脚本会失败。
+
+set -e
+
+# 技能的正本位置（本仓库内的技能目录，或 cc-switch 的落盘点）
+SRC="D:/WorkSpace/AI/skills/skills/project-doc-governance"
+# 目标 agent 的技能目录下的落点
+DST="$USERPROFILE/.qoder-cn/skills/project-doc-governance"
+
+if [ ! -d "$SRC" ]; then
+  echo "错误：源不存在 $SRC"
+  exit 1
+fi
+
+if [ -e "$DST" ] && [ ! -L "$DST" ]; then
+  BACKUP="${DST}.bak-$(date +%Y%m%d%H%M%S)"
+  echo "目标已存在实目录，先备份到 $BACKUP"
+  mv "$DST" "$BACKUP"
+fi
+
+# mklink 是 cmd 内建命令，路径要转成反斜杠
+win() { printf '%s' "$1" | sed 's|/|\\|g'; }
+
+cmd //c "mklink /J \"$(win "$DST")\" \"$(win "$SRC")\""
+
+echo
+echo "完成。验证方式：在 $SRC 里新建一个文件，然后在 agent 里确认能看到它——"
+echo "只确认目录存在不能证明链接生效。"

@@ -60,6 +60,8 @@ console.log('\nrepo-broken');
     ['③ status 枚举校验', 'status="liveing" 非法'],
     ['③ last_verified 未来日期', 'last_verified="2099-01-01" 晚于今天'],
     ['④ covers 路径不存在', 'covers 路径不存在：src/nonexistent-module/'],
+    ['⑥ 终态痕迹', 'process-traces.md 终态痕迹[修订史/更正记录]：勘误'],
+    ['⑦ 反引号假路径', '引用了不存在的路径：src/missing/module.ts'],
     ['⑧ 热区目录未登记进热索引', '2026-02-02-live-thing 在 docs/tasks/ 下但未登记进热索引'],
   ];
   for (const [name, needle] of expect) {
@@ -70,6 +72,10 @@ console.log('\nrepo-broken');
   check('scope=process 不要求 covers', !out.includes('governance/rules.md'), '不应报告 rules.md');
   // 反例：热索引以 archive/ 前缀引用归档任务是允许的
   check('archive/ 前缀引用不报违规', !out.includes('2026-01-01-old-thing 被热索引'), '');
+  // 反例：规则文本里用反引号列举禁用词，不得被⑥误报
+  check('反引号内的禁用词不算痕迹', !out.includes('rules-quoted.md'), '');
+  // 反例：非仓库根相对路径（子包内相对路径）不得误报
+  check('子包相对路径不误报', !out.includes('electron/main/index.ts'), '子包内路径不应被检查');
 }
 
 // ---------- 组 2：repo-clean ----------
