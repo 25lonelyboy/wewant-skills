@@ -68,7 +68,11 @@ console.log('\nrepo-broken');
     ['③ last_verified 未来日期', 'last_verified="2099-01-01" 晚于今天'],
     ['④ covers 路径不存在', 'covers 路径不存在：src/nonexistent-module/'],
     ['⑥ 终态痕迹', 'process-traces.md 终态痕迹[修订史/更正记录]：勘误'],
+    ['⑥ 过程阶段引用', 'process-refs.md 终态痕迹[过程阶段引用]：（P5）'],
+    ['⑥ 过程文档引用', 'process-refs.md 终态痕迹[过程文档引用]：分设计'],
+    ['⑥ 事件式教训（带日期）', 'process-refs.md 终态痕迹[事件式教训叙述]：教训（2026-'],
     ['⑦ 反引号假路径', '引用了不存在的路径：src/missing/module.ts'],
+    ['⑦ 代码行号', 'process-refs.md 引用了代码行号：L109'],
     ['⑧ 热区目录未登记进热索引', '2026-02-02-live-thing 在 docs/tasks/ 下但未登记进热索引'],
   ];
   for (const [name, needle] of expect) {
@@ -83,6 +87,14 @@ console.log('\nrepo-broken');
   check('反引号内的禁用词不算痕迹', !out.includes('rules-quoted.md'), '');
   // 反例：非仓库根相对路径（子包内相对路径）不得误报
   check('子包相对路径不误报', !out.includes('electron/main/index.ts'), '子包内路径不应被检查');
+  // 反例：文档自定义的分类词表（T1–T5）不是过程引用
+  check('T1–T5 分类词表不误报', !out.includes('T1 ') && !out.includes('（T1）'), '');
+  // 反例：不带日期的"历史教训（…）"是对规则的解释，保留
+  check('无日期的教训叙述不误报', !out.includes('pre hook 时代'), '');
+  // 反例：真实配置字段名、当前阈值事实不得误报
+  check('配置字段名与阈值事实不误报', !out.includes('exactOptionalPropertyTypes'), '');
+  // ⑧ 索引行精确计数（WARN 级）
+  check('⑧ 报出索引精确计数', out.includes('索引行写了精确计数'), '');
 }
 
 // ---------- 组 2：repo-clean ----------
