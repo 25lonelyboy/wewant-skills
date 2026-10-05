@@ -5,11 +5,14 @@ description: Use when a repository has messy or boundary-unclear docs/, an overs
 
 # 项目文档治理
 
-更新时间：2026-09-03
-
 ## 核心原则
 
-建立轻量但可执行的仓库文档知识系统：事实源唯一、过程材料隔离、入口可导航、陈旧可检测。让未来任务先读入口和索引，再按需进入具体主题，避免每次全量读取文档，也避免采信与代码不符的陈旧文档。
+> 每一条内容都要挣得它的位置：不重复、不过期、不留过程。
+
+组织方式（分层、索引、frontmatter）是达成它的手段，不是目的。技能覆盖两条线：
+
+- **仓库态**：已有文档长什么样——分层、索引、可达性、陈旧检测（`scripts/doc-lint.js` 等检查项）。
+- **写入时**：正要在写的这段该不该写、算什么——取舍判据、溯源标注、更新方式（`references/doc-writing-and-curation.md`）。
 
 ## 操作模式判定
 
@@ -17,10 +20,12 @@ description: Use when a repository has messy or boundary-unclear docs/, an overs
 
 | 模式 | 判定条件 | 读取 | 产出 |
 |---|---|---|---|
-| 初始化 | 仓库无 docs/ 体系或无 AGENTS.md | `references/doc-taxonomy-template.md` | docs 骨架 + 各层 README + AGENTS.md 治理规则 + scripts/doc-lint.js 落仓库并登记 AGENTS.md |
-| 重组 | 已有体系但边界混乱、事实散落、孤儿文件多 | `references/doc-taxonomy-template.md` | 归位后的目录树 + 补齐的索引 + scripts/doc-lint.js 落仓库或更新副本并登记 AGENTS.md |
-| 沉淀 | 任务产出可复用结论，需写回文档 | `references/official-doc-and-knowledge-policy.md`；大任务加读 `references/task-doc-governance.md` | 事实源更新或任务目录 |
+| 初始化 | 仓库无 docs/ 体系或无 agent 入口文件 | `references/doc-taxonomy-template.md` | docs 骨架 + 各层 README + 入口文件治理规则 + doc-lint 落仓库并登记 |
+| 重组 | 已有体系但边界混乱、事实散落、不可达文件多 | `references/doc-taxonomy-template.md` | 归位后的目录树 + 补齐的索引 + doc-lint 落仓库或更新副本 |
+| 沉淀 | 任务产出可复用结论，需写回文档 | `references/doc-writing-and-curation.md`；大任务加读 `references/task-doc-governance.md` | 事实源改写或任务目录 |
 | 只读 | 只需查阅既有知识 | 沿 README 索引按需读取，不加载 reference | 无文件产出 |
+
+沉淀模式的验收：写回的事实源文档通过 doc-lint ⑥⑦（无终态痕迹、无悬空引用），且改动已全局对齐（旧值在其它文档中已同步）。
 
 ## 何时不用本技能
 
@@ -40,39 +45,42 @@ description: Use when a repository has messy or boundary-unclear docs/, an overs
 - `docs/governance/`：文档体系维护规则、命名规则、路线图、协作边界。
 - `docs/tasks/`：大任务、大阶段、专项治理、迁移或调研的过程材料。
 
-创建或重组目录树时，读取 `references/doc-taxonomy-template.md`。制定或评审 ADR 时，读取 `references/adr-governance.md`。
+目录树、单文档结构模板、索引规则见 `references/doc-taxonomy-template.md`。制定或评审 ADR 见 `references/adr-governance.md`。
 
 ## 命名与新鲜度
 
 - 活文档（事实源）使用稳定语义名，例如 `tenant-model.md`；变更历史交给 git，不靠改名。
 - 不可变过程记录使用日期前缀，例如 `2026-08-16-plan.md`、任务目录 `2026-08-16-task-name/`。
 - 存量仓库不强制迁移旧文件名；新建文件按本规则执行。
-- 活文档用 frontmatter 声明新鲜度：`status`（living/snapshot/deprecated）、`covers`（描述的代码路径）、`last_verified`（最后核对属实的日期）。信任 `last_verified`，不信任编辑时间。
-- 行为兜底：文档是索引，代码是事实源；文档结论将影响决策时先核对代码；发现不一致采信代码并修复文档；`deprecated` 文档只作线索，不直接引用结论。
+- 活文档用 frontmatter 声明新鲜度：`status`（living/snapshot/deprecated）、`scope`（code/process）、`covers`（描述的代码路径）、`last_verified`（最后核对属实的日期）。信任 `last_verified`，不信任编辑时间。
+- **作废的文档默认删除**，历史交给 git；仅当能指出具体读者或场景时才保留墓碑。ADR 的 Superseded 是例外。
+- 行为兜底：文档是索引，代码是事实源；文档结论将影响决策时先核对代码；发现不一致采信代码并修复文档。
 
-新鲜度三层机制（预防/检测/行为）与豁免范围见 `references/freshness-policy.md`。
+新鲜度三层机制、`scope` 语义与外部事实的来源要求见 `references/freshness-policy.md`。
 
 ## 任务过程文档
 
 大任务、大阶段、专项迁移或跨模块调研在 `docs/tasks/` 下建独立文件夹；小任务的可复用结论直接写入事实源，不建文件夹。
 
-- `docs/tasks/README.md` 是热索引：进行中 + 最近已完成任务，每任务一行。
+- `docs/tasks/README.md` 是热索引：进行中 + 最近已完成，每任务一行。
 - 完成超 90 天或结论提升完毕的任务移入 `docs/tasks/archive/` 冷索引。
-- 过程文件只追加不改写；收口时把最终结论提升到事实源，稳定决策写成 ADR。
+- 过程文件只追加不改写；**事实源文档正相反——是改写，只保留与当前事实匹配的内容**。
+- 收口时把最终结论提升到事实源，稳定决策写成 ADR。
 - 读取优先级：事实源 → tasks 热区 → archive（仅显式追溯）。
 
-目录结构、命名、收口与防误读规则见 `references/task-doc-governance.md`。
+目录结构、收口与防误读规则见 `references/task-doc-governance.md`。
 
-## 官方文档与 AGENTS.md
+## 官方文档与 agent 入口文件
 
-涉及版本、平台、供应商建议或不稳定技术决策时，官方文档是默认基线。AGENTS.md 控制在 150 行以内，只放可执行命令、硬规则和导航；禁止写入密钥、token、私有地址；改变已文档化行为的代码变更必须在同一提交内更新文档。
+涉及版本、平台、供应商建议或不稳定技术决策时，官方文档是默认基线；外部断言必须带来源与访问日期。agent 入口文件（`AGENTS.md`，或仓库既有的 `CLAUDE.md`）控制在 150 行以内，只放可执行命令、硬规则和导航；禁止写入密钥、token、私有地址；改变已文档化行为的代码变更必须在同一提交内更新文档。仓库两个入口文件并存时，指定一个为正本，另一个只放一行指针。
 
-精确规则与经验沉淀条件见 `references/official-doc-and-knowledge-policy.md`。
+精确规则见 `references/official-doc-and-knowledge-policy.md`；可粘贴的规则块见 `templates/agents-doc-governance-block.md`。
 
 ## 输出要求
 
+- **沉默不允许**：每条实质断言要么带来源，要么带标注。既无来源也无标注的裸断言视为违规——它让核实过的内容和编造的内容在文档里完全同形。
 - 优先给出可执行的仓库规则，不写散文化说明。
-- 明确“读哪里、写哪里、不写哪里”。
+- 明确"读哪里、写哪里、不写哪里"。
 - 保持事实源唯一；新建文件前先检查现有主题能否承载；新建后必须登记进所在目录 README 索引。
 - 事实文档只写代码中真实存在的行为；未落地的意图只能出现在计划或决策文档中。
 - 只读取本次决策需要的 reference，不为完整性而加载全部文档。
@@ -82,20 +90,23 @@ description: Use when a repository has messy or boundary-unclear docs/, an overs
 | 错误 | 修正 |
 |---|---|
 | 新文档平铺在 docs/ 根，不进任何索引 | 归位到对应层，并登记进该层 README |
-| 用“设计上会……”把未实现的意图写进事实文档 | 意图进 tasks/ 计划文档；事实源只写已验证行为 |
-| 以“现有文件太乱”为由绕开事实源新建文件 | 先拆分治理事实源，再归位 |
+| 用"设计上会……"把未实现的意图写进事实文档 | 意图进 tasks/ 计划文档；事实源只写已验证行为 |
+| 以"现有文件太乱"为由绕开事实源新建文件 | 先拆分治理事实源，再归位 |
 | 过程笔记写进 architecture/ | 过程材料进 tasks/，收口时只提升结论 |
 | 同一事实在多个文档重复维护 | 指定唯一事实源，其余位置只留链接 |
-| 靠手工时间戳判断新鲜度 | 用 `last_verified` + git 漂移检测 |
-| 验收命令写 `node scripts/doc-lint.js` 却在项目目录找不到脚本 | 脚本母版在技能基目录（加载技能时注入的 Base directory）；仓库副本 `scripts/doc-lint.js` 是初始化/重组的交付物，需登记进 AGENTS.md |
+| 往事实源里追加"本次变更"一节 | 事实源是改写式的：改正文，作废内容直接删 |
+| 索引行写了精确计数（"已有 7 篇 ADR"） | 只写定性结论；数字必然腐烂且无检测手段 |
+| 靠手工时间戳判断新鲜度 | 用 `last_verified` + 漂移检测 |
+| 验收命令写 `node scripts/doc-lint.js` 却在项目目录找不到脚本 | 副本是初始化/重组的交付物，须落仓库并登记入口文件。**ESM 仓库（根 package.json 有 `"type": "module"`）副本必须叫 `doc-lint.cjs`** |
 
 ## Red Flags——出现即停
 
-- “先放这里，以后再归位。”→ 现在归位，或说明本次不写的理由。
-- “文档按设计意图写，代码没接上也先这样。”→ 事实文档必须与代码一致，差异先修复或明确标注为计划。
-- “为了全面了解背景，我把 docs 都读一遍。”→ 沿索引按需读取；入口文件不该要求全量阅读。
-- “这份旧文档说得挺详细，先用它的结论。”→ 旧结论先核对代码或查 `last_verified`。
-- “跨模块任务顺手记在架构文档里。”→ 建 tasks/ 任务文件夹。
+- "先放这里，以后再归位。"→ 现在归位，或说明本次不写的理由。
+- "文档按设计意图写，代码没接上也先这样。"→ 事实文档必须与代码一致，差异先修复或明确标注为计划。
+- "为了全面了解背景，我把 docs 都读一遍。"→ 沿索引按需读取；入口文件不该要求全量阅读。
+- "这份旧文档说得挺详细，先用它的结论。"→ 旧结论先核对代码或查 `last_verified`。
+- "跨模块任务顺手记在架构文档里。"→ 建 tasks/ 任务文件夹。
+- "先把这段放进去，反正以后会整理。"→ 写入时的取舍判据就是现在：不会被复用、不是当前事实、不是决策依据，就删。
 
 ## 本技能不管什么
 
@@ -107,16 +118,29 @@ description: Use when a repository has messy or boundary-unclear docs/, an overs
 
 初始化或重组完成后按顺序验收：
 
-1. doc-lint 全绿（孤儿文件、死链、frontmatter、covers 漂移、AGENTS.md 行数）。脚本母版在技能基目录，不在被治理仓库内，双层运行方式：
-   - agent 即时验收：`node "<技能基目录>/scripts/doc-lint.js" "<仓库根>"`（尖括号均为占位符，替换为实际路径并保留双引号，防止路径含空格）。技能基目录 = 加载本技能时上下文注入的 `Base directory for this skill` 行给出的路径（本 SKILL.md 即位于该目录内）。
-   - 仓库长期自检：初始化/重组必须把母版复制到 `<仓库根>/scripts/doc-lint.js`，并在 AGENTS.md 验证命令区登记 `node scripts/doc-lint.js .`，供 CI/hook 与后续任务原样执行。副本与母版比对：在技能基目录执行 `node "<技能基目录>/scripts/doc-lint.js" --version`，在仓库根执行 `node scripts/doc-lint.js --version`，版本号一致即最新，落后即随重组更新副本。
-2. 检索测试：派一个无上下文的 subagent，只给一个真实问题，验证它沿 README 索引在 2–3 次读取内触达目标事实（每多一个信息域约 +1 跳）。
+1. **doc-lint 全绿**。脚本需 Node ≥ 18；无 Node 时按 `templates/manual-checklist.md` 人工过一遍。
+   脚本母版在技能安装目录（加载本技能时上下文给出的 `Base directory for this skill`），不在被治理仓库内，双层运行：
+   - agent 即时验收：`node "<技能安装目录>/scripts/doc-lint.js" "<仓库根>"`
+   - 仓库长期自检：把母版复制到 `<仓库根>/scripts/`（ESM 仓库用 `.cjs`）并在入口文件登记 `node scripts/doc-lint.js .`，供 CI/hook 原样执行。副本落后于母版时随重组更新：两侧各跑一次 `--version` 比对版本号。
+   检查项：① 可达性 ② 死链 ③ frontmatter 与字段值 ④ covers 漂移与路径 ⑤ 入口文件行数 ⑥ 终态痕迹 ⑦ 悬空引用 ⑧ tasks 索引一致性 ⑨ 活文档体积基线。
+2. **检索测试**：派一个无上下文的 subagent，只给一个真实问题，要求它**回报读取路径**，验证沿 README 索引在 2–3 跳内触达目标事实。
 3. 不通过则修索引和归位，重测直到通过。
+
+其他 harness 上，"技能安装目录"的取法不同（见该 harness 的适配说明）；本技能正文不依赖具体工具名。
 
 ## 按需引用
 
-- 创建或重组 `docs/` 树：`references/doc-taxonomy-template.md`。
-- 制定官方文档查阅、经验沉淀或 AGENTS.md 规则：`references/official-doc-and-knowledge-policy.md`。
+- 创建或重组 `docs/` 树、单文档结构与索引规则：`references/doc-taxonomy-template.md`。
+- **写回文档时的取舍、更新方式、溯源与标注**：`references/doc-writing-and-curation.md`。
 - 设计任务目录、过程材料、归档与收口：`references/task-doc-governance.md`。
 - 制定或评审架构决策记录：`references/adr-governance.md`。
 - 新鲜度预防、检测与行为规则：`references/freshness-policy.md`。
+- 官方文档查阅、沉淀判据、入口文件政策：`references/official-doc-and-knowledge-policy.md`。
+
+## 维护本技能
+
+- 版本用 git tag；改动记在仓库根的 `CHANGELOG.md`，不写进本文件（150 行预算）。
+- `doc-lint.js` 内的 `VERSION` 常量保留，用于仓库副本与母版比对。
+- 改了 `description` 字段（触发入口，等同于 API）时，同步更新 `agents/openai.yaml`。
+- 改了 `scripts/final-state-rules.json` 后，重新生成项目 hook 侧的副本（doc-lint 会校验 `rules_version`）。
+- 改脚本或检查项后跑 `node scripts/selftest.js` 回归。
