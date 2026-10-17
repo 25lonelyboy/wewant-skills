@@ -10,7 +10,7 @@
  * 覆盖三组：
  *   1. fixtures/repo-broken —— 每类失败各一例，逐个断言被报出
  *   2. fixtures/repo-clean  —— 全绿，退出码 0
- *   3. 临时 git 仓库        —— ④ 的豁免修复：snapshot / ADR 不报漂移，living 报
+ *   3. 临时 git 仓库        —— ④ 的豁免与降级：snapshot / ADR 不报漂移，living 报为 WARN
  *
  * 夹具的边界：夹具是"已知该怎么报"的断言，能防回归；但它由写检查项的人编写，
  * 因此继承同一套盲点。真实仓库（如大型 monorepo）才能暴露设计层面的误报——
@@ -133,7 +133,9 @@ console.log('\ndrift 豁免（临时 git 仓库）');
     sh('git add src && git commit -q -m src', dir, neu);
 
     const { out } = runLint(dir);
-    check('living 文档报漂移（正例）', out.includes('live.md 疑似陈旧'), out);
+    // ④ 时间戳漂移降级为 WARN：仍是"去核对"的信号，但不再阻断（不进 FAIL）
+    check('living 文档漂移为 WARN', out.includes('[WARN] ④ docs/architecture/live.md 疑似陈旧'), out);
+    check('漂移不再进 FAIL ④ 桶', !out.includes('[FAIL] ④'), out);
     check('snapshot 文档不报漂移', !out.includes('snap.md 疑似陈旧'), out);
     check('ADR 不报漂移', !out.includes('ADR-001-example.md 疑似陈旧'), out);
   } finally {

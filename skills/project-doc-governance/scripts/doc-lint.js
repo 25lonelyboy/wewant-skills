@@ -21,8 +21,9 @@
  *   ② 死链：docs/ 与根入口文件内的相对 md 链接必须有效
  *   ③ frontmatter：活文档必须有 status / last_verified（scope=code 时还需 covers）；
  *      status 与 last_verified 的值必须合法
- *   ④ covers 漂移：covers 覆盖代码的最后提交晚于文档最后提交 → 疑似陈旧（需 git）；
- *      covers 路径不存在 → 报错
+ *   ④ covers：covers 路径不存在 → FAIL（真错）；covers 覆盖代码的最后提交晚于文档
+ *      最后提交 → 疑似陈旧（需 git），降为 WARN——它问的是"要不要去核对"，不是
+ *      "文档错了"。代码本就比文档改得勤，硬失败只会制造噪声；降噪靠收窄 covers
  *   ⑤ AGENTS.md 行数预算
  *   ⑥ 终态痕迹：事实源层不得出现修订史/自我更正/删除线/免责散文/待办占位/过程阶段引用
  *      （词表见 final-state-rules.json；行内代码内的词不算，供规则文本列举禁用词）
@@ -39,7 +40,7 @@
  */
 'use strict';
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 
 const fs = require('fs');
 const path = require('path');
@@ -458,7 +459,9 @@ function checkDrift(allDocs) {
       const coverTs = gitLastCommitTs(c);
       if (coverTs === null) continue;
       if (coverTs > docTs) {
-        issues.drift.push(`${rel(f)} 疑似陈旧：covers 的 ${c} 在文档最后提交之后有变更`);
+        // WARN 而非 FAIL：漂移是"去核对"的信号，代码比文档改得勤是常态，硬失败=噪声
+        warnings.push(
+          `④ ${rel(f)} 疑似陈旧：covers 的 ${c} 在文档最后提交之后有变更（去核对，非阻断）`);
       }
     }
   }
@@ -733,7 +736,7 @@ const labels = {
   reach: '① 可达性',
   deadlink: '② 死链',
   frontmatter: '③ frontmatter 与字段值',
-  drift: '④ covers 漂移与路径',
+  drift: '④ covers 路径',
   budget: '⑤ AGENTS.md 行数',
   finalstate: '⑥ 终态痕迹',
   dangling: '⑦ 引用与定位符',

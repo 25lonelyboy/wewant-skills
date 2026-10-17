@@ -7,6 +7,22 @@
 - **技能包版本**（本文件的条目 + git tag）：技能整体的迭代
 - **`doc-lint.js` 的 `VERSION` 常量**：只跟踪脚本本身。它服务于"仓库里的副本是否落后于母版"的比对，所以脚本没变时不应跟着升——否则会给出假的落后信号
 
+## 1.5.0
+
+来源：本仓库自用回执——④ 漂移在真实仓库里近乎常态地误报，以及缺少跨任务待办的归集处。
+
+- **④ 时间戳漂移降级为 WARN**（`doc-lint.js` `VERSION` → 1.5.0）
+  - 漂移问的是"要不要去核对"，不是"文档错了"；代码比文档改得勤是常态，硬 FAIL 只制造噪声
+  - `covers` 路径不存在仍为 FAIL（真错）；FAIL 桶标签收窄为「④ covers 路径」
+  - `freshness-policy.md` 补 WARN 语义与降噪手段（收窄 `covers`：写具体子目录而非整树）
+  - **放弃**"`last_verified` 精确到分秒并作为漂移基准"的方案：`last_verified` 只在提交文档时才前进，恒 ≤ 文档 git 时间，`max(docGitTs, lastVerified)` 是空操作——文档内自带的时间戳无法压制漂移。③ 的未来日期字符串比较也因此无需改动（date-only 下本就正确）
+- **新增仓库级待办总账 `docs/tasks/backlog.md`**（模板 `templates/backlog.md`）
+  - 三表：未解决（只记问题不记方案）/ 待解决（已排期·进行中）/ 已解决（记解决日期与验证证据，长期保留不删）
+  - 长期总账，文件名与标题不带日期前缀；按需创建；须在 `docs/tasks/README.md` 链接以满足 ① 可达性
+  - 放在 `tasks/` 而非 `governance/`：过程文档豁免 ⑥ 终态痕迹，才能合法承载"待办占位"
+  - `task-doc-governance.md` 增「全局待办总账」节；`doc-taxonomy-template.md` tasks 树与职责边界同步；SKILL.md 任务过程文档节加一条
+- selftest 组 3 断言改为 WARN 级；31 条断言全绿
+
 ## 1.4.0
 
 来源：`wewant-multi-admin` 实跑回执（技能验收通过，同时暴露 5 条技能层问题）。改动集中在"写作层有规则、无检测"这个缺口上。

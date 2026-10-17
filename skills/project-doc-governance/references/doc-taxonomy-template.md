@@ -38,6 +38,7 @@ docs/
     README.md
   tasks/
     README.md
+    backlog.md          # 仓库级待办总账，按需创建（见 task-doc-governance.md）
     archive/
       README.md
 ```
@@ -53,7 +54,7 @@ docs/
 - `docs/operations/`：环境、CI/CD、中间件、监控、备份、部署拓扑。避免能力尚不存在时提前写大量猜测性文档。
 - `docs/decisions/`：ADR 唯一存放地。不可逆、影响模块边界或含真实权衡的决策。规则见 `adr-governance.md`。
 - `docs/governance/`：文档体系维护规则、命名规范、职责边界、路线图。避免存放实时架构事实。
-- `docs/tasks/`：大任务、大阶段、专项迁移、调研的过程材料；热索引 + archive 冷索引。避免把临时过程结论直接当成稳定架构事实。
+- `docs/tasks/`：大任务、大阶段、专项迁移、调研的过程材料；热索引 + archive 冷索引；跨任务待办归仓库级 `backlog.md`。避免把临时过程结论直接当成稳定架构事实。
 
 ## 单文档结构
 

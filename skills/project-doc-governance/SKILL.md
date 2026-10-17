@@ -63,6 +63,7 @@ description: Use when a repository has messy or boundary-unclear docs/, an overs
 大任务在 `docs/tasks/` 下建独立文件夹；小任务的可复用结论直接写入事实源。
 
 - `docs/tasks/README.md` 是热索引（进行中 + 最近已完成，每任务一行）；完成超 90 天或结论提升完毕移入 `archive/`。
+- 跨任务待办进仓库级 `docs/tasks/backlog.md`（未解决/待解决/已解决三表，只记问题不记方案）：收口未处置问题登记于此，开新任务前先扫。
 - 过程文件只追加不改写；**事实源文档正相反——改写，只保留与当前事实匹配的内容**。
 - 收口时把结论提升到事实源、稳定决策写成 ADR；读取优先级：事实源 → tasks 热区 → archive（仅显式追溯）。
 
