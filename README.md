@@ -19,9 +19,17 @@ skills/                              仓库根
       scripts/                       doc-lint.js、final-state-rules.json
       templates/                     可粘贴的仓库侧产物（pre-commit、CI、规则块等）
       agents/                        其他 harness 的入口清单
+    playwright-mcp-setup/            技能：Playwright MCP + 浏览器扩展接入
+      SKILL.md
+      README.md                      marketplace 与提示词自安装两条路径
+      VERSIONS.md                    版本配套、Release 地址、SHA256
+      templates/                     MCP 配置模板
+      scripts/                       env-check.cjs、smoke.cjs
+      references/                    分步场景预案、排障表
   dev/                               ← 只给维护技能的人用，不分发
     selftest.js                      回归测试
     fixtures/                        回归夹具（repo-broken / repo-clean）
+    build-kit-release.cjs            playwright-mcp-kit binaries zip 打包
   README.md
   CHANGELOG.md
 ```
@@ -35,6 +43,7 @@ skills/                              仓库根
 | 技能 | 说明 |
 |---|---|
 | `project-doc-governance` | 仓库文档分层、唯一事实源、ADR、新鲜度漂移检测、任务归档；写作取舍、溯源标注与可执行的 doc-lint 检查 |
+| `playwright-mcp-setup` | Playwright MCP + 官方浏览器扩展接入，Agent 控制日常 Chrome/Edge 已登录标签页；二进制 kit 经本仓库 Release 分发，技能 README 含提示词自安装路径 |
 
 台账（来源、启用状态、内容哈希）以 cc-switch 的 `skills` 表为准，本仓库不重复维护。
 
@@ -58,6 +67,24 @@ git commit && git push
 改了 `scripts/final-state-rules.json` 后，项目侧的 hook 副本需要重新生成（doc-lint ⑥ 会校验 `rules_version`）。
 
 **夹具要跑，真实仓库也要抽查。** 夹具是"已知该怎么报"的断言，能防回归，但它由写检查项的人编写，继承同一套盲点；设计层面的误报（例如 monorepo 子包相对路径）只有真实仓库才暴露得出来。
+
+## 二进制 Release（playwright-mcp-setup）
+
+playwright-mcp-setup 的二进制 kit（便携 node.exe、运行时离线包、扩展离线包，约 114MB）不进 git 树，经本仓库 GitHub Release 分发：
+
+- tag 命名空间 `playwright-mcp-kit-v<版本>`，与仓库级 v1.x.x 隔离；版本号跟随 @playwright/mcp。
+- 资产为单个 binaries zip（`node/` + `packages/`），技能按 `skills/playwright-mcp-setup/VERSIONS.md` 登记的地址与 SHA256 获取并校验。
+- 运行时与扩展必须整套更换，禁止单边升级；技能内容改动随同版本一起发布。
+
+发布流程（维护者）：
+
+```bash
+node dev/build-kit-release.cjs <本地kit目录> playwright-mcp-kit-<版本>-binaries.zip
+# 把输出的 SHA256 与 Release 地址登记到 skills/playwright-mcp-setup/VERSIONS.md
+git commit && git push
+gh release create playwright-mcp-kit-v<版本> playwright-mcp-kit-<版本>-binaries.zip \
+  --title "Playwright MCP Kit <版本> (binaries)"
+```
 
 ## 归档
 

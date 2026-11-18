@@ -1,13 +1,26 @@
 # Changelog
 
-`project-doc-governance` 技能的版本记录。
+仓库各技能的版本记录，按技能分开跟踪。
+
+## playwright-mcp-setup
+
+版本号跟随二进制 kit（@playwright/mcp 版本），git tag `playwright-mcp-kit-v<版本>`；技能内容与二进制整套发布，Release 挂 binaries zip。
+
+### 0.0.85（2026-11-18）
+
+- 首次纳入仓库：Playwright MCP + 官方浏览器扩展接入技能，控制日常 Chrome/Edge 已登录标签页，免调试端口、免独立浏览器、免 Node 安装
+- 分发形态：技能子树经 marketplace（cc-switch 等）或 README 自安装提示词投递；二进制 kit（便携 node.exe v24.22.3、@playwright/mcp 0.0.85 运行时、扩展 0.5.0）经同仓库 Release 分发，SHA256 校验
+- 引导流程：确认 kit 位置（默认 `%USERPROFILE%/playwright-mcp-kit`）→ Release 获取 → env-check → 扩展安装与 token【人工】→ MCP 注册（Desktop/IDE/通用）→ stdio 或会话内冒烟
+- 配套：分步场景预案（references/scenarios.md）、症状排障表（references/troubleshooting.md）、版本与哈希清单（VERSIONS.md）
+
+## project-doc-governance
 
 两个版本号**分开跟踪**，可以不同步：
 
 - **技能包版本**（本文件的条目 + git tag）：技能整体的迭代
 - **`doc-lint.js` 的 `VERSION` 常量**：只跟踪脚本本身。它服务于"仓库里的副本是否落后于母版"的比对，所以脚本没变时不应跟着升——否则会给出假的落后信号
 
-## 1.5.0
+### 1.5.0
 
 来源：本仓库自用回执——④ 漂移在真实仓库里近乎常态地误报，以及缺少跨任务待办的归集处。
 
@@ -23,7 +36,7 @@
   - `task-doc-governance.md` 增「全局待办总账」节；`doc-taxonomy-template.md` tasks 树与职责边界同步；SKILL.md 任务过程文档节加一条
 - selftest 组 3 断言改为 WARN 级；31 条断言全绿
 
-## 1.4.0
+### 1.4.0
 
 来源：`wewant-multi-admin` 实跑回执（技能验收通过，同时暴露 5 条技能层问题）。改动集中在"写作层有规则、无检测"这个缺口上。
 
@@ -39,12 +52,12 @@
 - SKILL.md 增加"核验时"这条线与对应模式；验收节补"只认 `--version` 比对、文件级 diff 需 `--strip-trailing-cr`"（母版 CRLF / 下载副本 LF）
 - 夹具扩到 30 条断言，含 `T1–T5` 词表、无日期教训叙述、配置字段名三类反例
 
-## 1.3.1
+### 1.3.1
 
 - 回归夹具与 `selftest.js` 移到仓库根的 `dev/`：它们只服务"维护技能的人"，不应随技能分发到各 agent（`doc-lint.js` 未变，脚本版本仍为 1.3.0）
 - 技能分发范围明确为 `skills/<技能名>/` 子树，`README.md` 写明分发边界
 
-## 1.3.0
+### 1.3.0
 
 - 新增 `references/doc-writing-and-curation.md`：段落级取舍判据、事实源改写 vs 过程追加、单文档结构、溯源与标注（沉默不允许）
 - `doc-lint` 新增检查项 ⑥ 终态痕迹、⑦ 悬空引用
@@ -53,7 +66,7 @@
 - 新增 `templates/`：pre-commit、CI job、入口文件规则块、人工检查表、agent 目录链接与同步脚本
 - `SKILL.md` 增加"仓库态 / 写入时"两条线的说明与「沉默不允许」原则；「技能基目录」改为 harness 中立的"技能安装目录"
 
-## 1.2.0
+### 1.2.0
 
 - 漂移检测按 `status` 豁免 snapshot / deprecated / ADR；新增 `scope: code | process`，让无对应代码路径的活文档有合法形态
 - `covers` 路径存在性检查不再依赖 git
@@ -65,7 +78,7 @@
 - 新增夹具 `repo-broken` / `repo-clean` 与 `selftest.js`
 - references 修订：deprecated 默认删除、外部事实的来源要求、索引行不写精确计数、活文档不随任务归档；删掉各文件的「更新时间」头
 
-## 1.1.0
+### 1.1.0
 
 - `doc-lint.js` 引入 `VERSION` 常量与 `--version`，支持仓库副本与母版的版本比对
 - 五项检查：孤儿文件、死链、frontmatter、covers 漂移、AGENTS.md 行数

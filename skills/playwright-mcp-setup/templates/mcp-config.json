@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "<KIT_DIR>/node/node.exe",
+      "args": [
+        "<KIT_DIR>/runtime/node_modules/@playwright/mcp/cli.js",
+        "--extension",
+        "--output-dir",
+        "<KIT_DIR>/.output"
+      ],
+      "env": {
+        "PLAYWRIGHT_MCP_EXTENSION_TOKEN": "<TOKEN>"
+      }
+    }
+  }
+}
