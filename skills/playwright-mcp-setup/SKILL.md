@@ -46,7 +46,7 @@ certutil -hashfile <kit>/kit-binaries.zip SHA256   # 与 VERSIONS.md 登记值�
 tar -xf <kit>/kit-binaries.zip -C <kit>           # 或资源管理器解压
 ```
 
-校验不符说明传输不完整，重新下载。GitHub 不可达时走兜底：请已有 kit 的同事发送 binaries zip 或整个 kit 目录。获取完成后删除 kit-binaries.zip。
+校验不符说明传输不完整，重新下载（慢速网络大文件可用 `curl -C -` 断点续传）。GitHub 不可达时走兜底：请已有 kit 的同事发送 binaries zip 或整个 kit 目录。获取完成后删除 kit-binaries.zip。
 
 ### 2. 环境检查
 

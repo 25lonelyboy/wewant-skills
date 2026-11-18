@@ -6,7 +6,8 @@
 
 | 场景 | 假设 | 处理 |
 |---|---|---|
-| Release 下载中断/被截断 | 大文件经代理/网盘中转 | SHA256 与 VERSIONS.md 登记值比对，不符重新下载 |
+| Release 下载中断/被截断 | 大文件经代理/网盘中转 | SHA256 与 VERSIONS.md 登记值比对，不符重新下载；curl 用 `-C -` 断点续传 |
+| GitHub 下载的 zip tar 无法识别 | Windows bsdtar 对部分 zip 兼容问题（已实测） | 改用 unzip 或资源管理器解压 |
 | GitHub 不可达 | 网络受限机器 | 兜底：请已有 kit 的同事发送 binaries zip 或整个 kit 目录 |
 | Release tag 与 VERSIONS.md 不符 | 技能与二进制版本漂移 | 以技能内 VERSIONS.md 登记的 tag 为准整套获取，禁止混用 |
 | IM/网盘传输 zip | 含 exe 的 zip 可能被改名、拦截、截断 | 对照 VERSIONS.md 的 SHA256（`certutil -hashfile <zip> SHA256`）；被拦截改内网共享文件夹复制 |

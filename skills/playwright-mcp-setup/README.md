@@ -12,7 +12,7 @@
 
 ```text
 请安装 playwright-mcp-setup 技能：
-1. 下载 https://github.com/25lonelyboy/wewant-skills/archive/refs/heads/master.zip 并解压。
+1. 下载 https://github.com/25lonelyboy/wewant-skills/archive/refs/heads/master.zip 并解压（tar 报无法识别时改用 unzip 或资源管理器）。
 2. 把解压内容中的 skills/playwright-mcp-setup/ 目录（含全部子目录与文件）完整复制到你的用户级技能目录，目录名保持 playwright-mcp-setup。参考位置：Qoder Desktop/IDE 为 ~/.qoder-cn/skills/，Claude Code 为 ~/.claude/skills/，其他 agent 用对应的用户级技能目录。
 3. 完成后提示我重启会话；重启后我会调用 /playwright-mcp-setup，届时按技能引导完成 Playwright MCP 浏览器接入。
 ```
