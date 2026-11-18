@@ -22,10 +22,11 @@ skills/                              仓库根
     playwright-mcp-setup/            技能：Playwright MCP + 浏览器扩展接入
       SKILL.md
       README.md                      marketplace 与提示词自安装两条路径
-      VERSIONS.md                    版本配套、Release 地址、SHA256
+      VERSIONS.md                    版本配套、Release 地址、SHA256、技能修订
       templates/                     MCP 配置模板
       scripts/                       env-check.cjs、smoke.cjs
       references/                    分步场景预案、排障表
+      agents/                        其他 harness 的入口清单
   dev/                               ← 只给维护技能的人用，不分发
     selftest.js                      回归测试
     fixtures/                        回归夹具（repo-broken / repo-clean）
@@ -43,7 +44,7 @@ skills/                              仓库根
 | 技能 | 说明 |
 |---|---|
 | `project-doc-governance` | 仓库文档分层、唯一事实源、ADR、新鲜度漂移检测、任务归档；写作取舍、溯源标注与可执行的 doc-lint 检查 |
-| `playwright-mcp-setup` | Playwright MCP + 官方浏览器扩展接入，Agent 控制日常 Chrome/Edge 已登录标签页；二进制 kit 经本仓库 Release 分发，技能 README 含提示词自安装路径 |
+| `playwright-mcp-setup` | Playwright MCP + 官方浏览器扩展接入，Agent 控制日常 Chrome/Edge/Chromium 已登录标签页；二进制 kit 经本仓库 Release 分发，env-check 按 VERSIONS 比对版本，技能 README 含提示词自安装路径 |
 
 台账（来源、启用状态、内容哈希）以 cc-switch 的 `skills` 表为准，本仓库不重复维护。
 
@@ -54,13 +55,19 @@ skills/                              仓库根
 ```bash
 # 1. 改内容
 # 2. 本地验证（不需要安装到 agent）
-node dev/selftest.js                                   # 夹具回归
+node dev/selftest.js                                   # 夹具回归（doc-lint + env-check/build 失败路径）
 node skills/project-doc-governance/scripts/doc-lint.js <某个仓库根>   # 真实仓库抽查
+node skills/playwright-mcp-setup/scripts/env-check.cjs <本机kit>      # 真实 kit 检查（版本/扩展/落位）
+export PLAYWRIGHT_MCP_EXTENSION_TOKEN=...                  # 冒烟会打开浏览器标签
+node skills/playwright-mcp-setup/scripts/smoke.cjs <本机kit>
+unset PLAYWRIGHT_MCP_EXTENSION_TOKEN
 
 # 3. 发布
 git commit && git push
 # 4. 在 cc-switch 里对技能执行更新 → 落盘点刷新 → 各 agent 生效
 ```
+
+`selftest.js` 覆盖 doc-lint 夹具与 `playwright-mcp-setup` 的 env-check/build 失败路径；冒烟依赖真实浏览器，放在维护机上单独跑。
 
 改技能的 `SKILL.md` 措辞后，只有经过第 4 步才能在 agent 里看到效果；改 `doc-lint.js` 本身则不必——它是独立脚本，可以直接在仓库里跑。
 
@@ -72,14 +79,15 @@ git commit && git push
 
 playwright-mcp-setup 的二进制 kit（便携 node.exe、运行时离线包、扩展离线包，约 114MB）不进 git 树，经本仓库 GitHub Release 分发：
 
-- tag 命名空间 `playwright-mcp-kit-v<版本>`，与仓库级 v1.x.x 隔离；版本号跟随 @playwright/mcp。
+- tag 命名空间 `playwright-mcp-kit-v<版本>`，与仓库级 v1.x.x 隔离；版本号跟随 @playwright/mcp。tag 只标记二进制 kit 的构建提交。
 - 资产为单个 binaries zip（`node/` + `packages/`），技能按 `skills/playwright-mcp-setup/VERSIONS.md` 登记的地址与 SHA256 获取并校验。
-- 运行时与扩展必须整套更换，禁止单边升级；技能内容改动随同版本一起发布。
+- 运行时与扩展必须整套更换，禁止单边升级。纯技能内容修订用 `VERSIONS.md` 的 `技能修订` 与 CHANGELOG 的 `-revN` 记录，不移动二进制 tag；自安装提示词会核对修订号。
 
 发布流程（维护者）：
 
 ```bash
-node dev/build-kit-release.cjs <本地kit目录> playwright-mcp-kit-<版本>-binaries.zip
+node dev/build-kit-release.cjs <本地kit目录>           # 默认输出 playwright-mcp-kit-<mcp版本>-binaries.zip
+# 脚本校验运行时/扩展版本、packages 包名、VERSIONS 期望值与输出名；产物已存在时加 --force
 # 把输出的 SHA256 与 Release 地址登记到 skills/playwright-mcp-setup/VERSIONS.md
 git commit && git push
 gh release create playwright-mcp-kit-v<版本> playwright-mcp-kit-<版本>-binaries.zip \

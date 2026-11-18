@@ -1,0 +1,4 @@
+interface:
+  display_name: "Playwright MCP 接入"
+  short_description: "安装配置 Playwright MCP 与官方浏览器扩展，让 Agent 控制日常 Chrome/Edge/Chromium 的已登录标签页。"
+  default_prompt: "Use $playwright-mcp-setup 为一台 Windows 机器完成 Playwright MCP + 浏览器扩展接入：确认 kit 位置、获取并校验二进制、安装扩展、配置 token 与 MCP、跑通冒烟。"

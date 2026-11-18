@@ -13,33 +13,36 @@
 | nvm-windows 多版本 | `nvm use` 切换 PATH 符号链接 | 绝对路径免疫漂移；禁止把 command 写成 `"node"` |
 | 捆绑 exe 被策略/杀软拦截 | env-check 启动探测 FAIL | 系统 Node ≥20 时 command 改 `"node"` 或具体版本绝对路径（`%APPDATA%/nvm/vX.Y.Z/node.exe`）；否则请 IT 加白 |
 | 非 x64 架构 | 团队机器 win-x64 | ARM64 Windows 可仿真运行 x64 node.exe；或按 VERSIONS.md 换对应架构 |
+| env-check 报 node 版本与 VERSIONS 不一致 | 换过架构包或未整套升级 | 确认架构包来源；更新 VERSIONS 登记值或换回登记的 node.exe |
 | kit 路径含空格/中文 | spawn 无 shell、JSON 数组传参 | 已实测支持 |
 
 ## 连接类
 
 | 症状 | 原因 | 修复 |
 |---|---|---|
-| `Playwright Extension not found in "<profile>"` | 该 profile 未装扩展，或扩展 ID 不符 | 在目标 profile 加载 `<kit>/extension`；跑 env-check 核对 ID；多 profile 用 `--profile-dir-name "<目录名>"` 指定（取 `chrome://version` 的 Profile Path 末段） |
-| `Playwright extension did not connect within Ns ... PLAYWRIGHT_MCP_EXTENSION_TOKEN matches its token` | token 不匹配、扩展被禁用、连接页被拦截 | 到 Manage clients 页重新复制 token 更新配置；chrome://extensions 确认扩展已启用且无错误 |
-| 连接页显示 `Invalid token provided` | token 已 Rotate 或复制错 profile 的 token | 用当前 profile Manage 页的 token 更新配置 |
-| 连接页显示 `unsupported protocol version` / 提示更新扩展 | 运行时与扩展版本不配套 | 整套更换 kit 的 packages（见 VERSIONS.md），禁止只换一边 |
+| `Playwright Extension not found in "<profile>"` | 该 profile 未装扩展，或扩展 ID 不符，或浏览器用了非默认 user-data-dir | 在目标 profile 加载 `<kit>/extension`；跑 env-check 核对 ID；多 profile 用 `--profile-dir-name "<目录名>"`；非默认数据目录用 `--user-data-dir "<目录>"`，并让 env-check 用同一目录扫描 |
+| `Playwright extension did not connect within Ns ... PLAYWRIGHT_MCP_EXTENSION_TOKEN matches its token` | token 不匹配、扩展被禁用、连接页被拦截 | 到扩展页重新复制 token 更新配置；chrome://extensions 确认扩展已启用且无错误 |
+| 连接页显示 `Invalid token provided` | token 已 Rotate 或复制错 profile 的 token | 用当前 profile 扩展页的 token 更新配置 |
+| 连接页显示 `unsupported protocol version` / 提示更新扩展 | 运行时与扩展版本不配套，或商店版扩展未随 kit 升级 | 按 VERSIONS.md 整套更换 packages；商店版从商店更新到 VERSIONS 登记版本，或改用离线包 |
 | 连接页显示 `only allows loopback connections` | relay 地址非 127.0.0.1 | 正常部署不会出现；检查是否自行改动了 server 监听配置 |
 | 连接超时且 token/扩展状态均正常 | 代理软件（Proxifier 等）或防火墙拦截回环 WS、node.exe 本地监听 | 代理放行 127.0.0.1/[::1]；防火墙允许 node.exe 本地通信 |
-| `"chrome" executable not found` / `Unsupported channel` | 浏览器不在标准安装位置 | args 加 `--executable-path "<exe绝对路径>"` |
+| `"chrome" executable not found` / `Unsupported channel` | 浏览器不在标准安装位置；Chromium 没有 `--browser` 通道 | args 加 `--executable-path "<exe绝对路径>"`；Chromium 必须用 `--executable-path` 指向 `chromium.exe` |
 | 打开连接页时 spawn 报 SxS / Permission denied / 应用程序无法启动 | Chrome 更新中间态：旧启动器引用的版本目录已被更新器删除 | 重启日常 Chrome 完成更新替换；或临时 `--executable-path` 指向可用启动器（更新待替换的 `new_chrome.exe`） |
 | Agent 里看不到 browser_* 工具 | MCP 配置未生效 | 确认注册成功（Desktop 用 manage_app_mcp list_servers）；重启会话 |
+| env-check 报"扩展已启用"FAIL | 扩展被禁用或被策略关闭 | 在 chrome://extensions / edge://extensions 启用；按提示解除策略后重跑 |
+| env-check 报商店版版本与 VERSIONS 不一致 | 商店扩展版本与 kit 不配套 | 从商店更新到登记版本，或卸载商店版改用 `<kit>/extension` |
 
 ## 会话类
 
 | 症状 | 原因 | 修复 |
 |---|---|---|
 | 操作中途 debugger 断开，标签页失联 | 页面含受限 frame（`chrome://`、其他扩展注入的 `chrome-extension://` frame），Chrome 强制 detach | 在目标站点禁用注入 frame 的扩展，或其站点访问改为"点击时"；换无此类扩展的 profile |
-| 某个标签页操作不到 | 标签页归属其他客户端或未归属本客户端 | 把标签页拖入本会话的 Playwright 标签组；Manage clients 页可查各客户端归属 |
+| 某个标签页操作不到 | 标签页归属其他客户端或未归属本客户端 | 把标签页拖入本会话的 Playwright 标签组；扩展页可查各客户端归属 |
 | 浏览器窗口被反复切到前台 | 默认行为 | Chrome ≥158 且扩展 ≥0.5.0 时 args 加 `--background` |
-| 多个会话互相干扰 | 每个会话各起一个 server、各占一个标签组，标签页独占归属 | 正常机制；用 `--session-name`/`--session-color` 区分标签组 |
+| 多个会话互相干扰 | 每个会话各起一个 server、各占一个标签组，标签页独占归属 | 正常机制；0.0.85 不能给标签组命名/着色。避免自动分组加 `--no-tab-group`，避免抢焦点加 `--background` |
 
 ## 安全边界
 
 - 客户端可读浏览器级 cookie，不能修改浏览器级状态（加/清 cookie、授权限被拒绝）。
 - 客户端只能操作自己拥有的标签页；连接审批或 token 决定归属。
-- token 泄露等同交出浏览器控制权：Manage 页 Rotate token 即作废旧 token，更新配置后重启会话。
+- token 泄露等同交出浏览器控制权：Manage 页 Rotate token 即作废旧 token，更新配置后重启会话。token 只放 MCP 配置或进程环境变量，不放命令行参数、仓库与日志。

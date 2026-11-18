@@ -4,7 +4,19 @@
 
 ## playwright-mcp-setup
 
-版本号跟随二进制 kit（@playwright/mcp 版本），git tag `playwright-mcp-kit-v<版本>`；技能内容与二进制整套发布，Release 挂 binaries zip。
+版本号跟随二进制 kit（@playwright/mcp 版本），git tag `playwright-mcp-kit-v<版本>`；二进制随 tag 发布，纯技能内容修订用 `-revN` 记录，不移动 tag。
+
+### 0.0.85-rev1（2026-11-18）
+
+来源：发布前四路审查（外部事实、全新机器走查、脚本坏数据实测、仓库一致性）。
+
+- 安装与升级：第 1 步先 `mkdir -p <kit>`；升级时清旧 `packages/`、`runtime/`、`extension/` 后重取；步骤改为"获取 → 解压 → env-check"，env-check 版本不一致时回第 1 步
+- env-check：读取 VERSIONS.md 的「env-check 期望值」比对运行时/扩展/Node；manifest 与 package.json 解析失败输出 FAIL；service worker 必须为非空字符串；识别禁用、策略关闭与 Preferences 残留记录；真实路径归一；扫描 Chromium 与 `--user-data-dir`；RESULT 标出 WARN 数量
+- smoke：token 只读环境变量；支持 `--browser`/`--profile-dir-name`/`--executable-path`/`--user-data-dir`，固定 `--output-dir` 到 kit；严格检查 `### Error` 与 `### Result`；监听 child error/exit；默认 kit 改为 homedir
+- build：从包名读取版本并与 runtime/extension 交叉校验；校验 VERSIONS 期望值与输出名；`--force` 覆盖；临时文件 finally 清理；校验 zip 内容；输出组件哈希
+- 文档：manage_app_mcp 的调用顺序（`list_servers` → `get_config` → `update`）与必填参数；多 profile、Edge、Chromium 与非默认 user-data-dir 的注册参数；token 只走环境变量
+- 分发：自安装提示词核对 `技能修订`；新增 `agents/openai.yaml`；selftest 增加 env-check 与 build 失败路径
+- 二进制 kit 与 Release 资产不变
 
 ### 0.0.85（2026-11-18）
 

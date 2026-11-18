@@ -7,10 +7,11 @@
  * 开发期工具，**不进分发**：技能分发给各 agent 的是
  * `skills/project-doc-governance/` 子树，本文件与 fixtures/ 在仓库根的 dev/ 下。
  *
- * 覆盖三组：
+ * 覆盖四组：
  *   1. fixtures/repo-broken —— 每类失败各一例，逐个断言被报出
  *   2. fixtures/repo-clean  —— 全绿，退出码 0
  *   3. 临时 git 仓库        —— ④ 的豁免与降级：snapshot / ADR 不报漂移，living 报为 WARN
+ *   4. playwright-mcp-setup —— env-check 坏输入/禁用记录/版本不一致，smoke 缺 token，build 包名校验
  *
  * 夹具的边界：夹具是"已知该怎么报"的断言，能防回归；但它由写检查项的人编写，
  * 因此继承同一套盲点。真实仓库（如大型 monorepo）才能暴露设计层面的误报——
@@ -138,6 +139,87 @@ console.log('\ndrift 豁免（临时 git 仓库）');
     check('漂移不再进 FAIL ④ 桶', !out.includes('[FAIL] ④'), out);
     check('snapshot 文档不报漂移', !out.includes('snap.md 疑似陈旧'), out);
     check('ADR 不报漂移', !out.includes('ADR-001-example.md 疑似陈旧'), out);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// ---------- 组 4：playwright-mcp-setup ----------
+console.log('\nplaywright-mcp-setup');
+{
+  const ENV_CHECK = path.resolve(__dirname, '../skills/playwright-mcp-setup/scripts/env-check.cjs');
+  const SMOKE = path.resolve(__dirname, '../skills/playwright-mcp-setup/scripts/smoke.cjs');
+  const BUILD = path.join(__dirname, 'build-kit-release.cjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pwmcp-selftest-'));
+  const w = (p, s) => {
+    const full = path.join(dir, p);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, s);
+  };
+  const versions = path.join(dir, 'VERSIONS.md');
+  fs.writeFileSync(versions, 'env-check 期望值：mcp=0.0.85, extension=0.5.0, node=v24.22.3\n');
+  const runEnv = (kit, extra = []) => {
+    const r = spawnSync(process.execPath, [ENV_CHECK, kit, '--versions', versions, ...extra], { encoding: 'utf8' });
+    return { code: r.status, out: `${r.stdout || ''}${r.stderr || ''}` };
+  };
+  const key = Buffer.from('selftest-key').toString('base64');
+  try {
+    // 坏 manifest 必须 FAIL，而不是抛栈
+    const k1 = path.join(dir, 'kit-broken-manifest');
+    w('kit-broken-manifest/extension/manifest.json', '{');
+    let r = runEnv(k1);
+    check('坏 manifest 输出 FAIL', r.out.includes('扩展 manifest.json 可解析'), r.out);
+    check('坏 manifest 不抛栈', !r.out.includes('SyntaxError'), r.out);
+    check('坏 manifest 退出码 1', r.code === 1, `实际 ${r.code}`);
+
+    // 缺 background.service_worker 必须 FAIL
+    const k2 = path.join(dir, 'kit-no-sw');
+    w('kit-no-sw/extension/manifest.json', JSON.stringify({ manifest_version: 3, version: '0.5.0', key, background: {} }));
+    r = runEnv(k2);
+    check('缺 service worker 报 FAIL', r.out.includes('service worker') && r.out.includes('FAIL'), r.out);
+    check('缺 service worker 不报 OK', !r.out.includes('OK   | service worker'), r.out);
+
+    // 版本不一致必须 FAIL
+    const k3 = path.join(dir, 'kit-old');
+    w('kit-old/extension/manifest.json', JSON.stringify({ manifest_version: 3, version: '0.4.0', key, background: { service_worker: 'lib/background.mjs' } }));
+    w('kit-old/extension/lib/background.mjs', '');
+    w('kit-old/runtime/node_modules/@playwright/mcp/package.json', JSON.stringify({ name: '@playwright/mcp', version: '0.0.84' }));
+    w('kit-old/runtime/node_modules/@playwright/mcp/cli.js', '');
+    r = runEnv(k3);
+    check('运行时版本不符报 FAIL', r.out.includes('运行时版本与 VERSIONS 一致'), r.out);
+    check('扩展版本不符报 FAIL', r.out.includes('扩展版本与 VERSIONS 一致'), r.out);
+
+    // 禁用扩展记录必须 FAIL（假 user-data-dir，不碰真实浏览器目录）
+    const k4 = path.join(dir, 'kit-fake');
+    w('kit-fake/extension/manifest.json', JSON.stringify({ manifest_version: 3, version: '0.5.0', key, background: { service_worker: 'lib/background.mjs' } }));
+    w('kit-fake/extension/lib/background.mjs', '');
+    w('kit-fake/runtime/node_modules/@playwright/mcp/package.json', JSON.stringify({ name: '@playwright/mcp', version: '0.0.85' }));
+    w('kit-fake/runtime/node_modules/@playwright/mcp/cli.js', '');
+    const userData = path.join(dir, 'fake-user-data');
+    w('fake-user-data/Local State', JSON.stringify({ profile: { info_cache: { Default: {} } } }));
+    w('fake-user-data/Default/Preferences', JSON.stringify({
+      extensions: { settings: { mmlmfjhmonkocbjadbfplnigmagldckm: { location: 4, path: path.join(k4, 'extension'), state: 0 } } },
+    }));
+    r = runEnv(k4, ['--user-data-dir', userData]);
+    check('禁用扩展报 FAIL', r.out.includes('扩展已启用'), r.out);
+
+    // smoke 缺 token：退出 1 且提示环境变量，不启动浏览器
+    const s = spawnSync(process.execPath, [SMOKE, k4], {
+      encoding: 'utf8',
+      env: { ...process.env, PLAYWRIGHT_MCP_EXTENSION_TOKEN: '' },
+    });
+    const sout = `${s.stdout || ''}${s.stderr || ''}`;
+    check('smoke 缺 token 退出 1', s.status === 1, `实际 ${s.status}`);
+    check('smoke 提示环境变量', sout.includes('PLAYWRIGHT_MCP_EXTENSION_TOKEN'), sout);
+
+    // build 拒绝非约定包名
+    const bk = path.join(dir, 'build-kit');
+    w('build-kit/node/node.exe', '');
+    w('build-kit/packages/a.zip', 'x');
+    w('build-kit/packages/b.zip', 'x');
+    const b = spawnSync(process.execPath, [BUILD, bk], { encoding: 'utf8' });
+    const bout = `${b.stdout || ''}${b.stderr || ''}`;
+    check('build 拒绝非约定包名', b.status === 1 && bout.includes('packages/ 应恰含'), bout);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
